@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Estratégico | Régua Bem-Vindo PERmite</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --red: #dd2145;
+      --dark: #262626;
+      --muted: #71717a;
+      --bg: #f4f4f5;
+      --line: #e4e4e7;
+      --soft-red: rgba(221, 33, 69, .08);
+      --soft-dark: rgba(38, 38, 38, .05);
+      --white: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--dark);
+    }
+    .wrap { max-width: 1440px; margin: 0 auto; padding: 28px; }
+    .hero {
+      border-radius: 28px;
+      background: radial-gradient(circle at top right, rgba(221,33,69,.28), transparent 38%), var(--dark);
+      color: white;
+      padding: 34px;
+      box-shadow: 0 16px 40px rgba(0,0,0,.08);
+      display: grid;
+      gap: 24px;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+    }
+    .eyebrow { color: var(--red); font-weight: 900; letter-spacing: .22em; font-size: 12px; text-transform: uppercase; }
+    h1 { margin: 8px 0 0; font-size: clamp(32px, 4vw, 56px); line-height: 1; letter-spacing: -.04em; }
+    .hero p { max-width: 900px; color: #d4d4d8; line-height: 1.65; margin: 14px 0 0; }
+    .file-pill { min-width: 270px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06); border-radius: 22px; padding: 18px; }
+    .file-pill small { display: block; color: #a1a1aa; text-transform: uppercase; letter-spacing: .16em; font-weight: 800; }
+    .file-pill b { display: block; margin-top: 6px; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px; }
+    .section { margin-top: 22px; }
+    .card {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.04);
+    }
+    .upload {
+      border: 1px dashed rgba(221,33,69,.45);
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+    }
+    .btn {
+      border: none;
+      border-radius: 16px;
+      background: var(--red);
+      color: white;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: .2s ease;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(.96); }
+    .btn.dark { background: var(--dark); }
+    .btn.ghost { background: white; color: var(--dark); border: 1px solid var(--line); }
+    .hint { margin-top: 12px; padding: 14px; border-radius: 16px; background: #fafafa; color: #52525b; font-size: 13px; line-height: 1.55; border: 1px solid #eee; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip { font-size: 12px; font-weight: 800; padding: 7px 10px; background: white; border: 1px solid var(--line); border-radius: 999px; color: #52525b; }
+    .grid { display: grid; gap: 16px; }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .filters { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    label span { display: block; margin-bottom: 6px; color: #52525b; font-size: 13px; font-weight: 900; }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+      background: white;
+      color: var(--dark);
+    }
+    input:focus, select:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(221,33,69,.1); }
+    .metric { position: relative; overflow: hidden; min-height: 136px; }
+    .metric::after { content: ""; position: absolute; width: 110px; height: 110px; border-radius: 999px; right: -36px; top: -40px; background: var(--soft-red); }
+    .metric small { display: block; color: #71717a; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; font-weight: 900; }
+    .metric strong { display: block; margin-top: 12px; font-size: clamp(24px, 3vw, 34px); letter-spacing: -.03em; }
+    .metric p { margin: 6px 0 0; color: #71717a; font-size: 14px; }
+    .title { display: flex; gap: 9px; align-items: center; margin-bottom: 14px; }
+    .title h2, .title h3 { margin: 0; font-size: 18px; }
+    .icon { width: 34px; height: 34px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; color: var(--red); background: var(--soft-red); font-weight: 900; }
+    .sub { color: #52525b; line-height: 1.6; margin-top: -4px; }
+    .method-note { margin-top: 12px; border: 1px solid rgba(221,33,69,.12); background: var(--soft-red); border-radius: 16px; padding: 12px; font-size: 12px; line-height: 1.55; color: #52525b; }
+    .method-note b { color: var(--red); }
+    .chartBox { height: 340px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1080px; }
+    th { position: sticky; top: 0; background: var(--dark); color: white; z-index: 1; text-align: left; padding: 12px; }
+    td { padding: 12px; border-bottom: 1px solid #f1f1f1; color: #3f3f46; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .tableWrap { overflow: auto; border: 1px solid var(--line); border-radius: 18px; max-height: 520px; }
+    .red { color: var(--red); font-weight: 900; }
+    .statBlock { background: #fafafa; border: 1px solid #f0f0f0; border-radius: 18px; padding: 16px; }
+    .statBlock small { display: block; text-transform: uppercase; color: #71717a; letter-spacing: .16em; font-weight: 900; font-size: 11px; }
+    .statBlock strong { display: block; margin-top: 8px; font-size: 28px; color: var(--red); }
+    .statBlock p { margin: 8px 0 0; color: #52525b; line-height: 1.55; font-size: 13px; }
+    .source { background: var(--dark); color: white; border-color: rgba(255,255,255,.1); }
+    .source p { color: #d4d4d8; line-height: 1.6; }
+    .sourceGrid { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .sourceItem { border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); border-radius: 18px; padding: 14px; }
+    .sourceItem b { display: block; color: white; }
+    .sourceItem span { display: block; margin-top: 8px; color: #d4d4d8; font-size: 13px; line-height: 1.55; }
+    .notice { border: 1px solid rgba(221,33,69,.18); background: var(--soft-red); border-radius: 18px; padding: 16px; line-height: 1.55; color: #3f3f46; }
+    .notice b { color: var(--red); }
+    .kpiLine { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin-top: 10px; }
+    .barLine { height: 9px; border-radius: 999px; background: #e4e4e7; overflow: hidden; }
+    .barFill { height: 100%; background: var(--red); border-radius: 999px; }
+    @media (max-width: 1100px) { .grid-4, .filters, .sourceGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero, .upload { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) { .wrap { padding: 16px; } .grid-4, .grid-3, .grid-2, .filters, .sourceGrid { grid-template-columns: 1fr; } .hero { padding: 24px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">WhatsApp PERmite</div>
+        <h1>Dashboard Estratégico | Régua Bem-Vindo</h1>
+        <p>Análise de efetividade dos modelos de boas-vindas da PERmite, com foco em entrega, leitura, clareza persuasiva, prévia push e qualidade estratégica da primeira comunicação com o cliente.</p>
+      </div>
+      <div class="file-pill">
+        <small>Arquivo atual</small>
+        <b id="fileName">Base demonstrativa</b>
+        <p id="fileCount">0 campanhas carregadas</p>
+      </div>
+    </header>
+
+    <section class="section card upload">
+      <div>
+        <div class="title"><span class="icon">↑</span><h2>Subir planilha da Régua Bem-Vindo</h2></div>
+        <p class="sub">Carregue um arquivo .xlsx, .xls ou .csv com os dados dos disparos. O dashboard reconhece variações de cabeçalho automaticamente, porque aparentemente padronizar planilhas ainda é uma utopia distante.</p>
+        <div class="chips" id="requiredFields"></div>
+        <div class="hint" id="uploadInfo">Pronto para receber sua planilha. O processamento acontece no navegador, sem enviar dados para servidor.</div>
+      </div>
+      <div>
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none" />
+        <button class="btn" id="uploadBtn">Carregar planilha</button>
+      </div>
+    </section>
+
+    <section class="section card">
+      <div class="title"><span class="icon">≡</span><h2>Filtros estratégicos</h2></div>
+      <div class="grid filters">
+        <label><span>ID Template</span><select id="templateFilter"></select></label>
+        <label><span>Abordagem</span><select id="approachFilter"></select></label>
+        <label><span>Promessa</span><select id="promiseFilter"></select></label>
+        <label><span>Imagem</span><select id="imageFilter"></select></label>
+        <label><span>Data início</span><input type="date" id="dateStart" /></label>
+        <label><span>Data fim</span><input type="date" id="dateEnd" /></label>
+        <label style="grid-column: span 4;"><span>Buscar campanha, template ou mensagem</span><input id="searchInput" placeholder="Ex.: exclusivo, primeiro acesso, saldo, peças, atendente..." /></label>
+        <label><span>Mín. recebidos</span><input type="number" min="0" id="minReceived" value="0" /></label>
+        <label><span>Ação</span><button class="btn ghost" id="resetBtn" style="width:100%">Restaurar base</button></label>
+      </div>
+    </section>
+
+    <section class="section grid grid-4">
+      <div class="card metric"><small>Total enviado</small><strong id="mSent">0</strong><p id="mCampaigns">0 campanhas</p></div>
+      <div class="card metric"><small>Taxa de entrega</small><strong id="mDelivery">0,00%</strong><p id="mReceived">0 recebidos</p></div>
+      <div class="card metric"><small>Taxa de leitura</small><strong id="mRead">0,00%</strong><p id="mReads">0 lidos</p></div>
+      <div class="card metric"><small>Score Bem-Vindo</small><strong id="mScore">0,00%</strong><p>Leitura + clareza + aderência</p></div>
+    </section>
+
+    <section class="section card">
+      <div class="title"><span class="icon">👁</span><h2>Efetividade da prévia push | Boas-vindas</h2></div>
+      <p class="sub">Analisa se os primeiros 35 a 50 caracteres mostram exclusividade, acesso, valor ou próximo passo. Essa prévia funciona como o assunto do e-mail, só que esmagado pela tela do celular, porque o caos precisava caber no bolso.</p>
+      <div class="grid grid-4" style="margin-top:16px">
+        <div class="statBlock"><small>Score prévia</small><strong id="pushScore">0,00%</strong><p>Força média dos primeiros 50 caracteres.</p></div>
+        <div class="statBlock"><small>Valor até 50</small><strong id="pushValue">0,00%</strong><p>Mensagens com benefício claro na notificação.</p></div>
+        <div class="statBlock"><small>CTA até 50</small><strong id="pushAction">0,00%</strong><p>Mensagens com ação rápida na prévia.</p></div>
+        <div class="statBlock"><small>Abertura fraca</small><strong id="pushWeak">0,00%</strong><p>Começos com saudação ou excesso de contexto.</p></div>
+      </div>
+      <div class="notice" style="margin-top:16px"><b>Diretiva estratégica:</b> <span id="pushDirective">Abrir com acesso exclusivo, primeiro passo ou benefício direto da PERmite.</span></div>
+    </section>
+
+    <section class="section card">
+      <div class="title"><span class="icon">🧠</span><h2>Fundamentação metodológica da análise</h2></div>
+      <p class="sub">A Régua Bem-Vindo mede se a primeira comunicação cria percepção de valor, reduz insegurança no primeiro uso e posiciona a PERmite como solução exclusiva para transformar vendas em poder de compra para peças.</p>
+      <div class="grid grid-4" style="margin-top:16px" id="methodGrid"></div>
+      <div class="method-note"><b>Hipótese central:</b> mensagens de boas-vindas tendem a performar melhor quando unem pertencimento, acesso exclusivo, benefício prático, primeiro passo simples e suporte claro.</div>
+    </section>
+
+    <section class="section grid grid-2">
+      <div class="card"><div class="title"><span class="icon">↗</span><h3>Taxa de leitura por data</h3></div><p class="sub">Mostra o comportamento da régua ao longo do tempo.</p><div class="method-note"><b>Fonte metodológica:</b> leitura temporal para identificar estabilidade da abordagem e impacto de variações.</div><div class="chartBox"><canvas id="chartTimeline"></canvas></div></div>
+      <div class="card"><div class="title"><span class="icon">▥</span><h3>Funil de entrega e leitura</h3></div><p class="sub">Separa enviados, recebidos e lidos para não culpar a copy por problema de base.</p><div class="method-note"><b>Fonte metodológica:</b> leitura operacional de canal e saúde de base.</div><div class="chartBox"><canvas id="chartFunnel"></canvas></div></div>
+      <div class="card"><div class="title"><span class="icon">🏆</span><h3>Top templates por taxa de leitura</h3></div><p class="sub">Compara modelos de mensagem quando o ID Template estiver preenchido.</p><div class="method-note"><b>Fonte metodológica:</b> clareza persuasiva, posicionamento e esforço cognitivo.</div><div class="chartBox"><canvas id="chartTemplates"></canvas></div></div>
+      <div class="card"><div class="title"><span class="icon">🎯</span><h3>Gatilhos por força estratégica</h3></div><p class="sub">Identifica quais elementos aparecem nos modelos com melhor resposta.</p><div class="method-note"><b>Fonte metodológica:</b> NeuroMap, Kahneman, Kotler, Seth Godin e GaryVee.</div><div class="chartBox"><canvas id="chartTriggers"></canvas></div></div>
+    </section>
+
+    <section class="section card">
+      <div class="title"><span class="icon">✓</span><h2>Leitura executiva da efetividade da régua</h2></div>
+      <p class="sub">Visão consolidada da saúde da Régua Bem-Vindo em quatro dimensões: força de leitura, saúde da entrega, risco operacional e clareza persuasiva.</p>
+      <div class="grid grid-4" style="margin-top:16px" id="healthGrid"></div>
+    </section>
+
+    <section class="section grid grid-3">
+      <div class="card" style="grid-column: span 2;">
+        <div class="title"><span class="icon">💡</span><h2>Insights estratégicos automáticos</h2></div>
+        <div class="grid grid-2" id="insightsGrid"></div>
+      </div>
+      <div class="card">
+        <div class="title"><span class="icon">→</span><h2>Melhor direção</h2></div>
+        <div class="notice" id="bestDirection"></div>
+      </div>
+    </section>
+
+    <section class="section card">
+      <div class="title"><span class="icon">★</span><h2>Top 2 templates estratégicos</h2></div>
+      <p class="sub">Mostra os dois melhores modelos por leitura, volume mínimo e aderência de boas-vindas. Quando não houver ID Template preenchido, o agrupamento aparece como “Sem ID Template”. Sim, a planilha cobra sua parte no drama.</p>
+      <div class="tableWrap"><table><thead><tr><th>ID Template</th><th>Abordagem</th><th>Promessa</th><th>Neuromarketing</th><th>Recebidos</th><th>Lidos</th><th>Tx. leitura</th><th>Score</th><th>Melhor direção</th></tr></thead><tbody id="rankingTable"></tbody></table></div>
+    </section>
+
+    <section class="section card">
+      <div class="title"><span class="icon">☰</span><h2>Ranking de campanhas</h2></div>
+      <div class="tableWrap"><table><thead><tr><th>Campanha</th><th>Data</th><th>ID Template</th><th>Imagem</th><th>Enviados</th><th>Erros</th><th>Recebidos</th><th>Lidos</th><th>Tx. entrega</th><th>Tx. erro</th><th>Tx. leitura</th><th>Abordagem</th></tr></thead><tbody id="campaignTable"></tbody></table></div>
+    </section>
+
+    <section class="section card source">
+      <div class="title"><span class="icon">∞</span><h2>Assinatura metodológica das fontes utilizadas</h2></div>
+      <p>As análises combinam engajamento, neurovendas, clareza persuasiva, posicionamento, comportamento B2B e contexto operacional de auto e motopeças.</p>
+      <div class="sourceGrid" id="sourceGrid"></div>
+    </section>
+  </div>
+
+<script>
+const DEMO_DATA = [
+  { campanha: "bemvindo_11_09", dataEnvio: "2025-09-11", idTemplate: "bem_vindo_exclusivo_01", textoMensagem: "Você agora faz parte de um grupo exclusivo de clientes da {{marca}} que podem usar as vendas no crédito para comprar peças com mais agilidade. Dúvidas? Clique em Falar com Atendente.", possuiImagem: "Não", enviados: 93, erros: 7, recebidos: 86, lidos: 68 },
+  { campanha: "bemvindo_20_10", dataEnvio: "2025-10-20", idTemplate: "bem_vindo_primeiro_acesso_02", textoMensagem: "Seu acesso PERmite já está ativo. Use suas vendas no cartão para ampliar seu poder de compra na {{marca}} e repor peças no estoque.", possuiImagem: "Sim", enviados: 86, erros: 5, recebidos: 78, lidos: 55 },
+  { campanha: "bemvindo_07_11", dataEnvio: "2025-11-07", idTemplate: "bem_vindo_suporte_03", textoMensagem: "Bem-vindo à PERmite. Agora você conta com uma nova forma de transformar vendas no cartão em poder de compra para peças. Fale com nosso time no primeiro acesso.", possuiImagem: "Não", enviados: 72, erros: 4, recebidos: 66, lidos: 48 },
+  { campanha: "bemvindo_29_12", dataEnvio: "2025-12-29", idTemplate: "bem_vindo_exclusivo_01", textoMensagem: "Você agora faz parte de um grupo exclusivo de clientes da {{marca}} que podem usar as vendas no crédito para comprar peças com mais agilidade. Dúvidas? Clique em Falar com Atendente.", possuiImagem: "Não", enviados: 80, erros: 3, recebidos: 76, lidos: 61 },
+  { campanha: "bemvindo_02_04", dataEnvio: "2026-04-02", idTemplate: "bem_vindo_primeiro_acesso_02", textoMensagem: "Seu acesso PERmite já está ativo. Use suas vendas no cartão para ampliar seu poder de compra na {{marca}} e repor peças no estoque.", possuiImagem: "Não", enviados: 95, erros: 4, recebidos: 91, lidos: 73 }
+];
+
+const REQUIRED_FIELDS = ["Campanha", "Data de envio", "ID Template", "Texto da mensagem", "Possui imagem", "Qtd. Enviados", "Qtd. Erros", "Qtd. Recebidos", "Qtd. Lidos"];
+const METHOD = [
+  { base: "NeuroMap / Neurovendas", eixo: "Primeira percepção de valor", texto: "Avalia se a mensagem mostra ganho rápido e reduz dúvida no primeiro contato." },
+  { base: "Kahneman", eixo: "Redução de risco", texto: "Observa se a comunicação diminui insegurança e esforço de decisão." },
+  { base: "Kotler", eixo: "Proposta de valor", texto: "Verifica se o benefício da PERmite aparece com clareza para o decisor B2B." },
+  { base: "Seth Godin", eixo: "Permissão e relevância", texto: "Mede se a mensagem parece útil, esperada e contextual para o cliente novo." },
+  { base: "GaryVee", eixo: "WhatsApp nativo", texto: "Analisa objetividade, gancho inicial e adequação ao canal." },
+  { base: "Ries e Trout", eixo: "Posicionamento", texto: "Confere se a PERmite é entendida como solução que transforma venda em poder de compra." },
+  { base: "Cadeia automotiva", eixo: "Giro de estoque", texto: "Conecta comunicação com reposição de peças, caixa e recorrência." },
+  { base: "Esforço cognitivo", eixo: "Clareza de ação", texto: "Mede tamanho, CTA, promessa e facilidade de entender o próximo passo." }
+];
+const SOURCES = [
+  { nome: "NeuroMap / SalesBrain e Neurovendas", uso: "Dor B2B, redução de risco, ganho percebido e decisão de compra." },
+  { nome: "Daniel Kahneman", uso: "Aversão à perda, esforço cognitivo e tomada de decisão rápida." },
+  { nome: "Philip Kotler", uso: "Proposta de valor, segmentação e comunicação para decisores." },
+  { nome: "Seth Godin", uso: "Permissão, relevância e utilidade em canais diretos." },
+  { nome: "Gary Vaynerchuk", uso: "Conteúdo nativo ao canal, objetividade e contexto." },
+  { nome: "Al Ries e Jack Trout", uso: "Posicionamento simples, memorável e consistente." },
+  { nome: "Cadeia automotiva e estoque", uso: "Reposição de peças, giro, previsibilidade e operação B2B." },
+  { nome: "Fontes de marketing em tempo real", uso: "Tendências de canal, comportamento, mídia e linguagem digital." }
+];
+const COLUMN_ALIASES = {
+  campanha: ["campanha", "nome da campanha", "nome campanha"],
+  dataEnvio: ["envio", "data envio", "data de envio", "data", "dt envio"],
+  idTemplate: ["id template", "id do template", "id tamplate", "template id", "id modelo"],
+  textoMensagem: ["texto da mensagem", "mensagem", "copy", "texto", "modelo da mensagem", "conteudo", "conteúdo"],
+  possuiImagem: ["possui imagem", "tem imagem", "imagem", "criativo", "com imagem"],
+  enviados: ["qtd enviados", "qtd. enviados", "quantidade enviada", "enviados", "envios"],
+  erros: ["qtd erros", "qtd. erros", "quantidade erros", "erros", "falhas"],
+  recebidos: ["qtd recebidos", "qtd. recebidos", "quantidade recebida", "recebidos", "entregues"],
+  lidos: ["qtd lidos", "qtd. lidos", "quantidade lidos", "lidos", "leituras", "abertos"]
+};
+let rawRows = [...DEMO_DATA];
+let charts = {};
+let filters = { template: "Todos", approach: "Todos", promise: "Todos", image: "Todos", start: "", end: "", search: "", minReceived: 0 };
+
+function normalizeText(value){ return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[._\-/]/g," ").replace(/\s+/g," ").trim(); }
+function hasAny(text, terms){ return terms.some(t => text.includes(normalizeText(t))); }
+function safeDiv(a,b){ return b ? a / b : 0; }
+function pct(v){ return Number.isFinite(v) ? new Intl.NumberFormat("pt-BR", {style:"percent", minimumFractionDigits:2, maximumFractionDigits:2}).format(v) : "0,00%"; }
+function num(v){ return new Intl.NumberFormat("pt-BR", {maximumFractionDigits:0}).format(v || 0); }
+function money(v){ return new Intl.NumberFormat("pt-BR", {style:"currency", currency:"BRL", minimumFractionDigits:2, maximumFractionDigits:2}).format(v || 0); }
+function parseNumber(value){
+  if(value === null || value === undefined || value === "") return 0;
+  if(typeof value === "number") return Number.isFinite(value) ? value : 0;
+  let text = String(value).replaceAll("R$","").replaceAll(" ","").replaceAll(" ","");
+  let cleaned = Array.from(text).filter(c => "0123456789,.".includes(c)).join("");
+  if(!cleaned) return 0;
+  const comma = cleaned.lastIndexOf(","), dot = cleaned.lastIndexOf(".");
+  if(comma > dot) cleaned = cleaned.replaceAll(".","").replace(",", ".");
+  else cleaned = cleaned.replaceAll(",","");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+function parseDate(value){
+  if(!value) return "";
+  if(value instanceof Date && !isNaN(value.getTime())) return value.toISOString().slice(0,10);
+  if(typeof value === "number" && XLSX?.SSF){ const d = XLSX.SSF.parse_date_code(value); if(d) return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`; }
+  const raw = String(value).trim();
+  const br = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+  if(br){ const year = br[3].length === 2 ? `20${br[3]}` : br[3]; return `${year}-${br[2].padStart(2,"0")}-${br[1].padStart(2,"0")}`; }
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const d = new Date(raw); return !isNaN(d.getTime()) ? d.toISOString().slice(0,10) : raw;
+}
+function findColumn(headers, aliases){
+  const normalized = headers.map(h => ({ original:h, normalized: normalizeText(h) }));
+  for(const alias of aliases){ const a = normalizeText(alias); const exact = normalized.find(h => h.normalized === a); if(exact) return exact.original; }
+  for(const alias of aliases){ const a = normalizeText(alias); const partial = normalized.find(h => h.normalized.includes(a) || a.includes(h.normalized)); if(partial) return partial.original; }
+  return null;
+}
+function worksheetToObjects(ws){
+  const matrix = XLSX.utils.sheet_to_json(ws, { header:1, defval:"", raw:true });
+  const nonEmpty = matrix.filter(line => Array.isArray(line) && line.some(cell => String(cell ?? "").trim() !== ""));
+  let bestIndex = 0, bestScore = -1;
+  nonEmpty.slice(0,25).forEach((line,index) => {
+    const headers = line.map(c => String(c ?? "").trim());
+    const score = Object.values(COLUMN_ALIASES).reduce((t, aliases) => t + (findColumn(headers, aliases) ? 1 : 0), 0);
+    if(score > bestScore){ bestScore = score; bestIndex = index; }
+  });
+  const headers = nonEmpty[bestIndex]?.map((c,i) => String(c ?? "").trim() || `Coluna ${i+1}`) || [];
+  const rows = nonEmpty.slice(bestIndex + 1).map(line => Object.fromEntries(headers.map((h,i) => [h, line[i] ?? ""])));
+  return { rows, headerRowIndex: bestIndex + 1 };
+}
+function analyzeMessage(message, image){
+  const text = normalizeText(message);
+  const raw = String(message || "").trim();
+  const words = text ? text.split(" ").length : 0;
+  const first50 = raw.slice(0,50);
+  const first50n = normalizeText(first50);
+  const weak = ["ola", "oi", "bom dia", "boa tarde", "boa noite", "tudo bem", "prezado"].some(t => text.startsWith(t));
+  const signals = {
+    exclusivity: hasAny(text, ["exclusivo", "exclusiva", "grupo exclusivo", "acesso exclusivo"]),
+    welcome: hasAny(text, ["bem vindo", "boas vindas", "agora voce faz parte", "agora você faz parte", "seja bem vindo"]),
+    saldo: hasAny(text, ["saldo", "vendas no credito", "vendas no crédito", "cartao", "cartão", "poder de compra"]),
+    pecas: hasAny(text, ["pecas", "peças", "estoque", "repor", "comprar peças", "comprar pecas"]),
+    support: hasAny(text, ["atendente", "vendedor", "especialista", "time", "duvidas", "dúvidas", "apoio"]),
+    cta: hasAny(text, ["clique", "fale", "acesse", "use", "comece", "ative", "responda"]),
+    firstAccess: hasAny(text, ["primeiro acesso", "acesso", "ativo", "ativado", "comece"]),
+    semAntecipacao: hasAny(text, ["sem taxa de antecipacao", "sem taxa de antecipação"]),
+    forbidden: hasAny(text, ["emprestimo", "empréstimo", "dinheiro livre", "limite garantido", "maquininha sem taxa", "melhor taxa"])
+  };
+  let abordagem = "Boas-vindas institucional";
+  if(signals.exclusivity && signals.saldo) abordagem = "Exclusividade + poder de compra";
+  else if(signals.firstAccess && signals.support) abordagem = "Primeiro acesso + suporte";
+  else if(signals.saldo && signals.pecas) abordagem = "Venda no cartão + compra de peças";
+  else if(signals.welcome && signals.exclusivity) abordagem = "Pertencimento premium";
+  let promessa = "Entrada na PERmite";
+  if(signals.saldo && signals.pecas) promessa = "Transformar vendas em peças";
+  else if(signals.exclusivity) promessa = "Acesso exclusivo PERmite";
+  else if(signals.support) promessa = "Apoio no primeiro acesso";
+  let neuro = "Redução de insegurança";
+  if(signals.exclusivity) neuro = "Exclusividade e pertencimento";
+  else if(signals.saldo && signals.pecas) neuro = "Ganho prático e poder de compra";
+  else if(signals.support) neuro = "Segurança e redução de fricção";
+  let opportunity = "Abrir com acesso exclusivo e benefício prático.";
+  if(weak) opportunity = "Evitar saudação e começar pelo valor da entrada na PERmite.";
+  else if(!signals.saldo || !signals.pecas) opportunity = "Conectar a boas-vindas com compra de peças e poder de compra.";
+  else if(!signals.cta) opportunity = "Adicionar CTA claro para primeiro acesso ou suporte.";
+  let firstValue = ["exclusivo", "acesso", "saldo", "vendas", "poder de compra", "pecas", "peças", "permite", "estoque"].map(t => first50n.indexOf(normalizeText(t))).filter(i => i >= 0).sort((a,b)=>a-b)[0];
+  const valueIn50 = firstValue !== undefined;
+  const actionIn50 = hasAny(first50n, ["clique", "fale", "use", "acesse", "comece"]);
+  let pushScore = 0;
+  if(valueIn50 && firstValue <= 12) pushScore += .28; else if(valueIn50 && firstValue <= 35) pushScore += .18; else if(valueIn50) pushScore += .10;
+  if(!weak) pushScore += .14;
+  if(actionIn50) pushScore += .14;
+  if(signals.exclusivity || signals.firstAccess) pushScore += .14;
+  if(image === "Sim") pushScore += .04; else pushScore += .10;
+  if(first50.length >= 18 && first50.length <= 50) pushScore += .10;
+  pushScore = Math.min(pushScore, 1);
+  const clarezaScore = Math.min((signals.cta ? .22 : 0) + (words >= 10 && words <= 60 ? .18 : 0) + (signals.saldo || signals.pecas ? .22 : 0) + (signals.exclusivity || signals.firstAccess ? .18 : 0) + (!signals.forbidden ? .20 : 0), 1);
+  const neuroScore = Math.min((signals.exclusivity ? .22 : 0) + (signals.saldo ? .18 : 0) + (signals.pecas ? .18 : 0) + (signals.support ? .14 : 0) + (signals.cta ? .14 : 0) + (signals.firstAccess ? .14 : 0), 1);
+  return { abordagem, promessa, neuro, opportunity, words, first50, weak, valueIn50, actionIn50, pushScore, clarezaScore, neuroScore, ...signals };
+}
+function normalizeRows(rows){
+  if(!rows.length) return [];
+  const headers = Object.keys(rows[0]);
+  const cols = Object.fromEntries(Object.entries(COLUMN_ALIASES).map(([k,a]) => [k, findColumn(headers,a)]));
+  return rows.map((row,i) => {
+    const texto = String(row[cols.textoMensagem] ?? row.textoMensagem ?? "").trim();
+    const image = normalizeText(row[cols.possuiImagem] ?? row.possuiImagem).startsWith("s") ? "Sim" : "Não";
+    const auto = analyzeMessage(texto, image);
+    const enviados = parseNumber(row[cols.enviados] ?? row.enviados), erros = parseNumber(row[cols.erros] ?? row.erros), recebidos = parseNumber(row[cols.recebidos] ?? row.recebidos), lidos = parseNumber(row[cols.lidos] ?? row.lidos);
+    const taxaEntrega = safeDiv(recebidos, enviados), taxaErro = safeDiv(erros, enviados), taxaLeitura = safeDiv(lidos, recebidos), engajamento = safeDiv(lidos, enviados);
+    const score = Math.min(taxaLeitura*.30 + taxaEntrega*.12 + (1-taxaErro)*.08 + auto.clarezaScore*.18 + auto.neuroScore*.18 + auto.pushScore*.14, 1);
+    return {
+      id:i, campanha: String(row[cols.campanha] ?? row.campanha ?? `Campanha ${i+1}`).trim(), dataEnvio: parseDate(row[cols.dataEnvio] ?? row.dataEnvio), idTemplate: String(row[cols.idTemplate] ?? row.idTemplate ?? "Sem ID Template").trim() || "Sem ID Template", textoMensagem: texto, possuiImagem:image, enviados, erros, recebidos, lidos, taxaEntrega, taxaErro, taxaLeitura, engajamento, score, ...auto
+    };
+  }).filter(r => r.enviados || r.recebidos || r.lidos || r.textoMensagem);
+}
+function aggregate(rows, groupKey){
+  const map = new Map();
+  rows.forEach(r => {
+    const key = groupKey(r) || "Não informado";
+    if(!map.has(key)) map.set(key, { nome:key, campanhas:0, enviados:0, erros:0, recebidos:0, lidos:0, scoreTotal:0, pushTotal:0, clarezaTotal:0, neuroTotal:0, abordagens:new Map(), promessas:new Map(), neuros:new Map(), opportunities:new Map() });
+    const it = map.get(key);
+    it.campanhas++; it.enviados += r.enviados; it.erros += r.erros; it.recebidos += r.recebidos; it.lidos += r.lidos; it.scoreTotal += r.score; it.pushTotal += r.pushScore; it.clarezaTotal += r.clarezaScore; it.neuroTotal += r.neuroScore;
+    it.abordagens.set(r.abordagem, (it.abordagens.get(r.abordagem)||0)+1); it.promessas.set(r.promessa, (it.promessas.get(r.promessa)||0)+1); it.neuros.set(r.neuro, (it.neuros.get(r.neuro)||0)+1); it.opportunities.set(r.opportunity, (it.opportunities.get(r.opportunity)||0)+1);
+  });
+  const top = m => Array.from(m.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0] || "Não informado";
+  return Array.from(map.values()).map(it => ({...it, taxaEntrega:safeDiv(it.recebidos,it.enviados), taxaErro:safeDiv(it.erros,it.enviados), taxaLeitura:safeDiv(it.lidos,it.recebidos), engajamento:safeDiv(it.lidos,it.enviados), score:safeDiv(it.scoreTotal,it.campanhas), push:safeDiv(it.pushTotal,it.campanhas), clareza:safeDiv(it.clarezaTotal,it.campanhas), neuroScoreAvg:safeDiv(it.neuroTotal,it.campanhas), abordagem:top(it.abordagens), promessa:top(it.promessas), neuro:top(it.neuros), opportunity:top(it.opportunities)}));
+}
+function currentData(){
+  const data = normalizeRows(rawRows);
+  const q = normalizeText(filters.search);
+  return data.filter(r => (!q || normalizeText(`${r.campanha} ${r.idTemplate} ${r.textoMensagem} ${r.abordagem} ${r.promessa}`).includes(q)) && (filters.template === "Todos" || r.idTemplate === filters.template) && (filters.approach === "Todos" || r.abordagem === filters.approach) && (filters.promise === "Todos" || r.promessa === filters.promise) && (filters.image === "Todos" || r.possuiImagem === filters.image) && (!filters.start || r.dataEnvio >= filters.start) && (!filters.end || r.dataEnvio <= filters.end));
+}
+function updateSelect(id, values, selected){
+  const el = document.getElementById(id); el.innerHTML = values.map(v => `<option value="${escapeHtml(v)}" ${v===selected?"selected":""}>${escapeHtml(v)}</option>`).join("");
+}
+function escapeHtml(str){ return String(str ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function render(){
+  const dataAll = normalizeRows(rawRows);
+  const templates = ["Todos", ...Array.from(new Set(dataAll.map(r => r.idTemplate))).sort()];
+  const approaches = ["Todos", ...Array.from(new Set(dataAll.map(r => r.abordagem))).sort()];
+  const promises = ["Todos", ...Array.from(new Set(dataAll.map(r => r.promessa))).sort()];
+  const images = ["Todos", ...Array.from(new Set(dataAll.map(r => r.possuiImagem))).sort()];
+  updateSelect("templateFilter", templates, filters.template); updateSelect("approachFilter", approaches, filters.approach); updateSelect("promiseFilter", promises, filters.promise); updateSelect("imageFilter", images, filters.image);
+  const rows = currentData();
+  const totals = rows.reduce((a,r)=>{a.campanhas++; a.enviados+=r.enviados; a.erros+=r.erros; a.recebidos+=r.recebidos; a.lidos+=r.lidos; a.score+=r.score; a.push+=r.pushScore; a.value50+=r.valueIn50?1:0; a.action50+=r.actionIn50?1:0; a.weak+=r.weak?1:0; a.clareza+=r.clarezaScore; a.neuro+=r.neuroScore; return a;}, {campanhas:0,enviados:0,erros:0,recebidos:0,lidos:0,score:0,push:0,value50:0,action50:0,weak:0,clareza:0,neuro:0});
+  const taxaEntrega = safeDiv(totals.recebidos, totals.enviados), taxaErro = safeDiv(totals.erros, totals.enviados), taxaLeitura = safeDiv(totals.lidos, totals.recebidos), score = safeDiv(totals.score, totals.campanhas);
+  document.getElementById("fileCount").textContent = `${num(dataAll.length)} campanhas carregadas`;
+  document.getElementById("mSent").textContent = num(totals.enviados); document.getElementById("mCampaigns").textContent = `${num(totals.campanhas)} campanhas filtradas`;
+  document.getElementById("mDelivery").textContent = pct(taxaEntrega); document.getElementById("mReceived").textContent = `${num(totals.recebidos)} recebidos`;
+  document.getElementById("mRead").textContent = pct(taxaLeitura); document.getElementById("mReads").textContent = `${num(totals.lidos)} lidos`;
+  document.getElementById("mScore").textContent = pct(score);
+  document.getElementById("pushScore").textContent = pct(safeDiv(totals.push, totals.campanhas)); document.getElementById("pushValue").textContent = pct(safeDiv(totals.value50, totals.campanhas)); document.getElementById("pushAction").textContent = pct(safeDiv(totals.action50, totals.campanhas)); document.getElementById("pushWeak").textContent = pct(safeDiv(totals.weak, totals.campanhas));
+  const weakRate = safeDiv(totals.weak, totals.campanhas); const valueRate = safeDiv(totals.value50, totals.campanhas);
+  document.getElementById("pushDirective").textContent = weakRate > .25 ? "Trocar saudações por ganchos como: Você agora tem acesso exclusivo, Seu acesso PERmite está ativo, Agora suas vendas podem virar peças." : valueRate < .5 ? "Antecipar acesso exclusivo, poder de compra ou compra de peças nos primeiros 50 caracteres." : "Manter benefício cedo e testar variações com CTA no primeiro bloco.";
+  renderHealth(taxaLeitura, taxaEntrega, taxaErro, safeDiv(totals.clareza, totals.campanhas), safeDiv(totals.neuro, totals.campanhas));
+  renderInsights(rows);
+  renderTables(rows);
+  renderCharts(rows);
+}
+function renderHealth(leitura, entrega, erro, clareza, neuro){
+  const items = [
+    { t:"Força de leitura da régua", v:pct(leitura), txt:`Leitura ${leitura>=.75?"forte":leitura>=.6?"boa":leitura>=.45?"moderada":"baixa"}. A primeira mensagem ganha força quando posiciona a PERmite como acesso valioso e fácil de usar.` },
+    { t:"Saúde da entrega", v:pct(entrega), txt:`Entrega ${entrega>=.85?"saudável":entrega>=.7?"aceitável":"sensível"}. Se cair, revise base e disparo antes de acusar a copy no tribunal corporativo.` },
+    { t:"Risco operacional", v:pct(erro), txt:`Risco ${erro<=.08?"baixo":erro<=.2?"moderado":"alto"}. Erro elevado reduz a amostra real e distorce leitura estratégica.` },
+    { t:"Clareza persuasiva", v:pct(clareza), txt:`Clareza ${clareza>=.75?"forte":clareza>=.6?"boa":clareza>=.45?"moderada":"baixa"}. Força neuro média: ${pct(neuro)}.` }
+  ];
+  document.getElementById("healthGrid").innerHTML = items.map(i => `<div class="statBlock"><small>${i.t}</small><strong>${i.v}</strong><p>${i.txt}</p></div>`).join("");
+}
+function renderInsights(rows){
+  const byTemplate = aggregate(rows, r => r.idTemplate).filter(i => i.recebidos >= Number(filters.minReceived || 0)).sort((a,b)=>b.score-a.score || b.lidos-a.lidos);
+  const best = byTemplate[0]; const bestRead = [...byTemplate].sort((a,b)=>b.taxaLeitura-a.taxaLeitura)[0]; const bestPush = [...byTemplate].sort((a,b)=>b.push-a.push)[0];
+  const insights = [
+    best ? `O template “${best.nome}” tem o melhor score estratégico (${pct(best.score)}), combinando leitura, entrega, clareza e aderência à régua.` : "Ainda não há dados suficientes para ranking por template.",
+    bestRead ? `A maior taxa de leitura está em “${bestRead.nome}” com ${pct(bestRead.taxaLeitura)} entre mensagens recebidas.` : "Sem leitura suficiente para conclusão.",
+    bestPush ? `A prévia mais forte está ligada ao template “${bestPush.nome}”, com score de push de ${pct(bestPush.push)}.` : "Sem dados de prévia suficientes.",
+    "Oportunidade recomendada: testar aberturas sem variável inicial e com valor imediato, como “Você agora tem acesso exclusivo” ou “Seu acesso PERmite está ativo”."
+  ];
+  document.getElementById("insightsGrid").innerHTML = insights.map((txt,i)=>`<div class="statBlock"><small>Insight ${i+1}</small><p>${txt}</p></div>`).join("");
+  document.getElementById("bestDirection").innerHTML = `<b>Priorizar boas-vindas que pareçam acesso estratégico, não aviso operacional.</b><br><br>A mensagem deve abrir com exclusividade ou benefício, explicar rapidamente como a PERmite ajuda a comprar peças e finalizar com CTA de primeiro acesso ou suporte.`;
+}
+function renderTables(rows){
+  const byTemplate = aggregate(rows, r => r.idTemplate).filter(i => i.recebidos >= Number(filters.minReceived || 0)).sort((a,b)=>b.score-a.score || b.taxaLeitura-a.taxaLeitura).slice(0,2);
+  document.getElementById("rankingTable").innerHTML = byTemplate.map(r => `<tr><td><b>${escapeHtml(r.nome)}</b></td><td>${escapeHtml(r.abordagem)}</td><td>${escapeHtml(r.promessa)}</td><td>${escapeHtml(r.neuro)}</td><td>${num(r.recebidos)}</td><td>${num(r.lidos)}</td><td class="red">${pct(r.taxaLeitura)}</td><td>${pct(r.score)}</td><td>${escapeHtml(r.opportunity)}</td></tr>`).join("") || `<tr><td colspan="9">Sem dados suficientes.</td></tr>`;
+  const ranked = [...rows].sort((a,b)=>b.score-a.score || b.taxaLeitura-a.taxaLeitura).slice(0,30);
+  document.getElementById("campaignTable").innerHTML = ranked.map(r => `<tr><td><b>${escapeHtml(r.campanha)}</b></td><td>${r.dataEnvio}</td><td>${escapeHtml(r.idTemplate)}</td><td>${r.possuiImagem}</td><td>${num(r.enviados)}</td><td>${num(r.erros)}</td><td>${num(r.recebidos)}</td><td>${num(r.lidos)}</td><td>${pct(r.taxaEntrega)}</td><td>${pct(r.taxaErro)}</td><td class="red">${pct(r.taxaLeitura)}</td><td>${escapeHtml(r.abordagem)}</td></tr>`).join("") || `<tr><td colspan="12">Sem dados para exibir.</td></tr>`;
+}
+function chart(id, type, data, options){ if(charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), { type, data, options }); }
+function renderCharts(rows){
+  const timeline = aggregate(rows, r => r.dataEnvio).sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
+  const byTemplate = aggregate(rows, r => r.idTemplate).sort((a,b)=>b.taxaLeitura-a.taxaLeitura).slice(0,8);
+  const byTrigger = aggregate(rows.flatMap(r => [{...r, trig:r.exclusivity?"Exclusividade":null},{...r,trig:r.saldo?"Poder de compra":null},{...r,trig:r.pecas?"Peças/estoque":null},{...r,trig:r.support?"Suporte":null},{...r,trig:r.cta?"CTA claro":null}]).filter(r=>r.trig), r => r.trig).sort((a,b)=>b.score-a.score);
+  const optPct = { responsive:true, maintainAspectRatio:false, scales:{ y:{ ticks:{ callback:v => Math.round(v*100)+"%" } } }, plugins:{ legend:{display:false} } };
+  const tooltip = { callbacks:{ label: ctx => `${ctx.dataset.label || "Valor"}: ${ctx.dataset.label?.toLowerCase().includes("taxa") || ctx.dataset.label?.toLowerCase().includes("score") ? pct(ctx.raw) : num(ctx.raw)}` } };
+  chart("chartTimeline", "line", { labels: timeline.map(i=>i.nome), datasets:[{ label:"Taxa de leitura", data:timeline.map(i=>i.taxaLeitura), borderColor:"#dd2145", backgroundColor:"rgba(221,33,69,.10)", tension:.35, fill:true, pointRadius:3 }] }, {...optPct, plugins:{...optPct.plugins, tooltip}});
+  chart("chartFunnel", "bar", { labels: timeline.map(i=>i.nome), datasets:[{label:"Enviados", data:timeline.map(i=>i.enviados), backgroundColor:"#262626"},{label:"Recebidos", data:timeline.map(i=>i.recebidos), backgroundColor:"#71717a"},{label:"Lidos", data:timeline.map(i=>i.lidos), backgroundColor:"#dd2145"}] }, { responsive:true, maintainAspectRatio:false, plugins:{ tooltip } });
+  chart("chartTemplates", "bar", { labels: byTemplate.map(i=>i.nome), datasets:[{label:"Taxa de leitura", data:byTemplate.map(i=>i.taxaLeitura), backgroundColor:"#dd2145", borderRadius:8}] }, {...optPct, plugins:{...optPct.plugins, tooltip}});
+  chart("chartTriggers", "bar", { labels: byTrigger.map(i=>i.nome), datasets:[{label:"Score", data:byTrigger.map(i=>i.score), backgroundColor:"#dd2145", borderRadius:8}] }, {...optPct, plugins:{...optPct.plugins, tooltip}});
+}
+async function handleFile(file){
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer, { type:"array", cellDates:true });
+  let best = null;
+  for(const name of wb.SheetNames){
+    const parsed = worksheetToObjects(wb.Sheets[name]);
+    const normalized = normalizeRows(parsed.rows);
+    if(normalized.length){ best = { name, parsed, count:normalized.length }; break; }
+  }
+  if(!best){ document.getElementById("uploadInfo").textContent = "Não consegui encontrar uma aba válida. Confira cabeçalhos e dados."; return; }
+  rawRows = best.parsed.rows;
+  document.getElementById("fileName").textContent = file.name;
+  document.getElementById("uploadInfo").textContent = `Arquivo carregado: ${file.name}. Aba usada: ${best.name}. Cabeçalho detectado na linha ${best.parsed.headerRowIndex}. Registros válidos: ${best.count}.`;
+  filters = { template:"Todos", approach:"Todos", promise:"Todos", image:"Todos", start:"", end:"", search:"", minReceived:0 };
+  document.getElementById("searchInput").value = ""; document.getElementById("dateStart").value = ""; document.getElementById("dateEnd").value = ""; document.getElementById("minReceived").value = 0;
+  render();
+}
+function init(){
+  document.getElementById("requiredFields").innerHTML = REQUIRED_FIELDS.map(f => `<span class="chip">${f}</span>`).join("");
+  document.getElementById("methodGrid").innerHTML = METHOD.map(i => `<div class="statBlock"><small>${i.base}</small><p><b>${i.eixo}</b></p><p>${i.texto}</p></div>`).join("");
+  document.getElementById("sourceGrid").innerHTML = SOURCES.map(i => `<div class="sourceItem"><b>${i.nome}</b><span>${i.uso}</span></div>`).join("");
+  document.getElementById("uploadBtn").onclick = () => document.getElementById("fileInput").click();
+  document.getElementById("fileInput").onchange = e => e.target.files?.[0] && handleFile(e.target.files[0]);
+  document.getElementById("resetBtn").onclick = () => { rawRows = [...DEMO_DATA]; document.getElementById("fileName").textContent = "Base demonstrativa"; document.getElementById("uploadInfo").textContent = "Base demonstrativa restaurada."; filters = { template:"Todos", approach:"Todos", promise:"Todos", image:"Todos", start:"", end:"", search:"", minReceived:0 }; document.getElementById("searchInput").value=""; document.getElementById("dateStart").value=""; document.getElementById("dateEnd").value=""; document.getElementById("minReceived").value=0; render(); };
+  ["templateFilter","approachFilter","promiseFilter","imageFilter"].forEach(id => document.getElementById(id).onchange = e => { const key = {templateFilter:"template", approachFilter:"approach", promiseFilter:"promise", imageFilter:"image"}[id]; filters[key] = e.target.value; render(); });
+  document.getElementById("searchInput").oninput = e => { filters.search = e.target.value; render(); };
+  document.getElementById("dateStart").onchange = e => { filters.start = e.target.value; render(); };
+  document.getElementById("dateEnd").onchange = e => { filters.end = e.target.value; render(); };
+  document.getElementById("minReceived").oninput = e => { filters.minReceived = Number(e.target.value || 0); render(); };
+  render();
+}
+init();
+</script>
+</body>
+</html>

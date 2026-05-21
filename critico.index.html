@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Estratégico | Régua Crítico PERmite - corrigido</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .thin-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+    .thin-scrollbar::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 999px; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="font-family: system-ui, sans-serif; padding: 24px; color: #262626;">Carregando Dashboard Régua Crítico...</div>
+  </div>
+  <script>
+    window.addEventListener('error', function(event) {
+      var root = document.getElementById('root');
+      if (root && root.innerHTML.indexOf('Carregando Dashboard') !== -1) {
+        root.innerHTML = '<div style="font-family:system-ui,sans-serif;padding:24px;color:#262626"><h1 style="color:#dd2145">Erro ao carregar o dashboard</h1><p>Confira sua conexão e tente recarregar a página. Detalhe: ' + String(event.message || 'erro desconhecido') + '</p></div>';
+      }
+    });
+  </script>
+  <script type="text/babel" data-presets="react" data-type="module">
+import React, { useMemo, useState } from "https://esm.sh/react@18.2.0";
+import { createRoot } from "https://esm.sh/react-dom@18.2.0/client";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, Legend, ScatterChart, Scatter, ZAxis
+} from "https://esm.sh/recharts@2.12.7?deps=react@18.2.0,react-dom@18.2.0";
+
+const BRAND_RED = "#dd2145";
+const BRAND_DARK = "#262626";
+
+const DEMO_DATA = [
+  {
+    campanha: "critico_demo_01",
+    regua: "Crítico",
+    dataEnvio: "2026-04-08",
+    idTemplate: "critico_retorno_01",
+    textoMensagem: "Sua PERmite pode voltar a girar hoje. Use a maquininha nas vendas no cartão e transforme movimento em mais poder de compra para peças.",
+    possuiImagem: "Não",
+    enviados: 220,
+    erros: 31,
+    recebidos: 176,
+    lidos: 128,
+    tpv: 86450.75,
+  },
+  {
+    campanha: "inativo_demo_01",
+    regua: "Inativo",
+    dataEnvio: "2026-04-10",
+    idTemplate: "inativo_retorno_01",
+    textoMensagem: "Seu cliente continua comprando no cartão. A diferença é: essa venda pode virar poder de compra na PERmite. Volte a usar hoje.",
+    possuiImagem: "Sim",
+    enviados: 185,
+    erros: 24,
+    recebidos: 149,
+    lidos: 101,
+    tpv: 52980.3,
+  },
+  {
+    campanha: "critico_demo_02",
+    regua: "Crítico",
+    dataEnvio: "2026-04-15",
+    idTemplate: "critico_saldo_giro_02",
+    textoMensagem: "Não deixe suas vendas no cartão fora da estratégia. Use a PERmite e volte a transformar TPV em movimento para o seu negócio.",
+    possuiImagem: "Não",
+    enviados: 260,
+    erros: 35,
+    recebidos: 209,
+    lidos: 151,
+    tpv: 124730.9,
+  },
+];
+
+const REQUIRED_FIELDS = [
+  "Campanha", "Régua", "Data de envio", "ID Template", "Texto da mensagem",
+  "Possui imagem", "Qtd. Enviados", "Qtd. Erros", "Qtd. Recebidos", "Qtd. Lidos", "TPV"
+];
+
+const COLUMN_ALIASES = {
+  campanha: ["campanha", "nome da campanha", "nome campanha", "campanha template"],
+  regua: ["regua", "régua", "tipo de regua", "tipo de régua", "comunicacao", "comunicação", "grupo", "segmento"],
+  dataEnvio: ["envio", "data envio", "data de envio", "data do envio", "data", "dt envio"],
+  idTemplate: ["id template", "id do template", "id tamplate", "id do tamplate", "template id", "id modelo"],
+  textoMensagem: ["texto da mensagem", "mensagem", "copy", "texto", "modelo da mensagem", "conteudo", "conteúdo", "modelo de mensagem"],
+  possuiImagem: ["possui imagem", "tem imagem", "imagem", "criativo", "com imagem", "sim não imagem", "sim nao imagem"],
+  enviados: ["qtd enviados", "qtd. enviados", "quantidade enviada", "quantidade enviados", "quantidade de enviados", "enviados", "envios", "qtd envio"],
+  erros: ["qtd erros", "qtd. erros", "quantidade erros", "quantidade de erros", "erros", "falhas", "erro"],
+  recebidos: ["qtd recebidos", "qtd. recebidos", "quantidade recebida", "quantidade recebidos", "quantidade de recebidos", "recebidos", "entregues", "entrega"],
+  lidos: ["qtd lidos", "qtd. lidos", "quantidade lidos", "quantidade de lidos", "lidos", "leituras", "abertos", "abertura"],
+  tpv: ["tpv", "valor tpv", "resultado tpv", "tpv gerado", "tpv transacionado", "valor transacionado", "transacionado", "volume transacionado", "volume de transacao", "volume de transação", "resultado", "resultado tpv gerado"],
+};
+
+const SOURCE_SIGNATURE = [
+  { nome: "NeuroMap / SalesBrain e Neurovendas", uso: "Estrutura a leitura de dor B2B, redução de risco, reativação de comportamento e ganho percebido." },
+  { nome: "Daniel Kahneman / Vieses Cognitivos", uso: "Sustenta aversão à perda, decisão sob risco e resposta a mensagens que reduzem perdas percebidas." },
+  { nome: "Estudos de cadeia automotiva e gestão de estoque", uso: "Fundamenta previsibilidade, reposição, giro de peças e controle operacional no contexto de auto e motopeças." },
+  { nome: "Philip Kotler", uso: "Apoia segmentação, público-alvo, proposta de valor e adequação da mensagem para decisores B2B." },
+  { nome: "Seth Godin", uso: "Orienta permissão, relevância e utilidade da comunicação em canais diretos como WhatsApp." },
+  { nome: "Gary Vaynerchuk", uso: "Apoia conteúdo nativo ao canal, linguagem direta, contexto e entrega de valor antes do pedido de ação." },
+  { nome: "Al Ries e Jack Trout", uso: "Fundamenta posicionamento simples e memorável da PERmite como solução que transforma vendas em poder de compra." },
+];
+
+const METHODOLOGY_FRAMEWORK = [
+  { eixo: "Reativação de comportamento", base: "NeuroMap / Neurovendas", aplicacao: "Avalia se a mensagem ativa dor de abandono, perda de giro e retorno ao uso da maquininha." },
+  { eixo: "Aversão à perda", base: "Kahneman / vieses cognitivos", aplicacao: "Identifica mensagens que mostram o que o cliente perde ao não transacionar: poder de compra, caixa, giro e recorrência." },
+  { eixo: "Esforço cognitivo", base: "Neurovendas e tomada de decisão", aplicacao: "Mede clareza, início forte, CTA direto e facilidade de entender o próximo passo no WhatsApp." },
+  { eixo: "Previsibilidade operacional", base: "Cadeia automotiva e estoque", aplicacao: "Conecta uso da maquininha, TPV, reposição de peças e manutenção do giro do negócio." },
+  { eixo: "Segmentação e proposta de valor", base: "Philip Kotler", aplicacao: "Avalia se a comunicação fala com o decisor certo e traduz TPV em benefício comercial real." },
+  { eixo: "Permissão e relevância", base: "Seth Godin", aplicacao: "Analisa se a mensagem parece útil, contextual e esperada para clientes críticos ou inativos." },
+  { eixo: "Conteúdo nativo ao canal", base: "Gary Vaynerchuk", aplicacao: "Observa se a copy respeita o WhatsApp: curta, direta, contextual e orientada à ação." },
+  { eixo: "Posicionamento", base: "Al Ries e Jack Trout", aplicacao: "Verifica se a PERmite aparece de forma simples e memorável como maquininha que transforma venda em poder de compra." },
+];
+
+const CHART_SOURCE_NOTES = {
+  tpvTemplate: "Base metodológica: Kotler para proposta de valor, Ries & Trout para posicionamento e leitura de TPV para validar retorno de uso da maquininha.",
+  regua: "Base metodológica: segmentação B2B e comportamento de reativação para comparar clientes inativos e críticos.",
+  gatilho: "Base metodológica: Kahneman e Neurovendas para avaliar aversão à perda, retorno ao uso, giro e redução de fricção.",
+  promessa: "Base metodológica: Kotler e posicionamento para medir qual promessa comunica melhor o motivo para voltar a usar a PERmite.",
+  cta: "Base metodológica: esforço cognitivo, Seth Godin e GaryVee para avaliar se o próximo passo é claro no WhatsApp.",
+  push: "Base metodológica: prévia de notificação, esforço cognitivo e conteúdo nativo ao canal para avaliar força dos primeiros 50 caracteres.",
+  volume: "Base metodológica: leitura estatística de amostra para evitar conclusões frágeis quando volume e TPV caminham em direções diferentes.",
+};
+
+const normalizeText = (value) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[._\-/]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const hasAny = (text, terms) => terms.some((term) => text.includes(normalizeText(term)));
+const safeDiv = (a, b) => (b ? a / b : 0);
+const pct = (value) => Number.isFinite(value) ? new Intl.NumberFormat("pt-BR", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) : "0,00%";
+const num = (value) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(value || 0);
+const money = (value) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value || 0);
+const shortText = (value, max = 140) => {
+  const text = String(value || "").trim();
+  return text.length <= max ? text || "Não informado" : `${text.slice(0, max)}...`;
+};
+
+const HEADER_LIKE_VALUES = new Set(["campanha", "nome da campanha", "data de envio", "id template", "id tamplate", "template", "texto da mensagem", "mensagem", "copy", "possui imagem", "qtd enviados", "qtd erros", "qtd recebidos", "qtd lidos", "tpv", "enviados", "erros", "recebidos", "lidos", "resultado"]);
+const INVALID_TEMPLATE_VALUES = new Set(["", "id template", "id do template", "id tamplate", "id do tamplate", "template id", "template", "nome template", "nome do template", "sem id template"]);
+const isHeaderLikeValue = (value) => HEADER_LIKE_VALUES.has(normalizeText(value));
+const isInvalidTemplateValue = (value) => INVALID_TEMPLATE_VALUES.has(normalizeText(value));
+
+const parseNumber = (value) => {
+  if (value === null || value === undefined || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  let text = String(value).trim();
+  if (!text) return 0;
+  const isNegative = text.includes("-");
+  text = text.replaceAll("R$", "").replaceAll("r$", "").replaceAll(" ", "").replaceAll(" ", "").trim();
+  let cleaned = Array.from(text).filter((char) => "0123456789,.".includes(char)).join("");
+  if (!cleaned) return 0;
+  const commaCount = cleaned.split(",").length - 1;
+  const dotCount = cleaned.split(".").length - 1;
+  if (commaCount > 0 && dotCount > 0) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+    cleaned = lastComma > lastDot ? cleaned.split(".").join("").replace(",", ".") : cleaned.split(",").join("");
+  } else if (commaCount > 0) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const decimalPart = cleaned.slice(lastComma + 1);
+    cleaned = commaCount === 1 && decimalPart.length > 0 && decimalPart.length <= 2 ? cleaned.replace(",", ".") : cleaned.split(",").join("");
+  } else if (dotCount > 0) {
+    const lastDot = cleaned.lastIndexOf(".");
+    const decimalPart = cleaned.slice(lastDot + 1);
+    const integerPart = cleaned.slice(0, lastDot);
+    if (dotCount === 1) {
+      if (decimalPart.length === 3 && integerPart.length <= 3) cleaned = integerPart + decimalPart;
+      else if (decimalPart.length > 0 && decimalPart.length <= 2) cleaned = integerPart + "." + decimalPart;
+      else if (decimalPart.length === 3) cleaned = integerPart + decimalPart;
+    } else {
+      cleaned = decimalPart.length > 0 && decimalPart.length <= 2 ? cleaned.slice(0, lastDot).split(".").join("") + "." + decimalPart : cleaned.split(".").join("");
+    }
+  }
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed)) return 0;
+  return isNegative ? -parsed : parsed;
+};
+
+const parseDate = (value) => {
+  if (!value) return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+  }
+  const raw = String(value).trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const br = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (br) {
+    const day = br[1].padStart(2, "0");
+    const month = br[2].padStart(2, "0");
+    const year = br[3].length === 2 ? `20${br[3]}` : br[3];
+    return `${year}-${month}-${day}`;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return raw;
+};
+
+const normalizeYesNo = (value) => {
+  const normalized = normalizeText(value);
+  if (["sim", "s", "yes", "y", "true", "1", "com imagem"].includes(normalized)) return "Sim";
+  if (["nao", "não", "n", "no", "false", "0", "sem imagem"].includes(normalized)) return "Não";
+  return value ? String(value) : "Não informado";
+};
+
+const inferRegua = (value, campanha, texto) => {
+  const combined = normalizeText(`${value || ""} ${campanha || ""} ${texto || ""}`);
+  if (combined.includes("inativo")) return "Inativo";
+  if (combined.includes("critico") || combined.includes("crítico")) return "Crítico";
+  return value ? String(value) : "Não informado";
+};
+
+function analyzePushPreview(message, possuiImagem) {
+  const raw = String(message || "").trim();
+  const normalized = normalizeText(raw);
+  const first35 = raw.slice(0, 35);
+  const first50 = raw.slice(0, 50);
+  const normalizedFirst50 = normalizeText(first50);
+  const weakOpenings = ["ola", "oi", "bom dia", "boa tarde", "boa noite", "tudo bem", "prezado", "cliente"];
+  const valueHooks = ["uso", "faz 30", "sem usar", "parada", "parado", "volte", "use", "maquininha", "permite", "cartao", "cartão", "vendas", "giro", "poder de compra", "hoje", "agora"];
+  const actionHooks = ["volte", "use", "utilize", "fale", "ative", "transacione", "venda", "clique"];
+  const riskHooks = ["uso", "sem usar", "parada", "parado", "nao deixe", "não deixe", "perde", "perder", "fora da estrategia", "fora da estratégia"];
+  const startsWeak = weakOpenings.some((term) => normalized.startsWith(term));
+  const hasMediaRisk = possuiImagem === "Sim";
+  const formattingWaste = Array.from(raw).filter((char) => ["*", "_", "~", "`"].includes(char)).length;
+  const findFirstIndex = (text, terms) => {
+    const indexes = terms.map((term) => text.indexOf(normalizeText(term))).filter((index) => index >= 0);
+    return indexes.length ? Math.min(...indexes) : -1;
+  };
+  const firstValueIndex = findFirstIndex(normalizedFirst50, valueHooks);
+  const hasValueIn50 = firstValueIndex >= 0;
+  const hasActionIn50 = actionHooks.some((term) => normalizedFirst50.includes(normalizeText(term)));
+  const hasRiskIn50 = riskHooks.some((term) => normalizedFirst50.includes(normalizeText(term)));
+  const startsWithDirectValue = ["faz 30", "uso", "volte", "use", "nao deixe", "não deixe", "sua permite"].some((term) => normalized.startsWith(normalizeText(term)));
+  let positionScore = 0;
+  if (firstValueIndex >= 0 && firstValueIndex <= 12) positionScore = 0.24;
+  else if (firstValueIndex >= 0 && firstValueIndex <= 35) positionScore = 0.16;
+  else if (firstValueIndex >= 0 && firstValueIndex <= 50) positionScore = 0.09;
+  const actionScore = hasActionIn50 ? 0.16 : 0;
+  const riskScore = hasRiskIn50 ? 0.14 : 0;
+  const clarityScore = (!startsWeak ? 0.08 : 0) + (normalizedFirst50.split(" ").filter(Boolean).length <= 10 ? 0.06 : 0) + (formattingWaste === 0 ? 0.04 : 0);
+  const mediaScore = hasMediaRisk ? 0.04 : 0.1;
+  const directScore = startsWithDirectValue ? 0.18 : 0;
+  const score = Math.min(positionScore + actionScore + riskScore + clarityScore + mediaScore + directScore, 1);
+  let classificacao = "Baixa";
+  if (score >= 0.78) classificacao = "Forte";
+  else if (score >= 0.6) classificacao = "Boa";
+  else if (score >= 0.42) classificacao = "Regular";
+  let diretiva = "Começar com retorno ao uso, perda evitada ou ação clara nos primeiros 35 a 50 caracteres.";
+  if (startsWeak) diretiva = "Evitar saudação longa e abrir direto com o retorno ao uso.";
+  else if (!hasActionIn50) diretiva = "Antecipar ação clara na prévia: volte, use, venda, transacione ou fale com vendedor.";
+  else if (!hasRiskIn50) diretiva = "Testar aversão à perda: retorno ao uso, maquininha parada ou vendas fora da estratégia.";
+  else if (hasMediaRisk) diretiva = "Testar versão sem imagem para não esconder o texto da notificação.";
+  return {
+    pushPreview35: first35,
+    pushPreview50: first50,
+    pushScore: score,
+    pushClassificacao: classificacao,
+    pushHasValueIn50: hasValueIn50 ? "Sim" : "Não",
+    pushHasActionIn50: hasActionIn50 ? "Sim" : "Não",
+    pushHasRiskIn50: hasRiskIn50 ? "Sim" : "Não",
+    pushStartsWeak: startsWeak ? "Sim" : "Não",
+    pushMediaRisk: hasMediaRisk ? "Sim" : "Não",
+    pushDiretiva: diretiva,
+  };
+}
+
+function classifyCommunication(message) {
+  const text = normalizeText(message);
+  const words = text ? text.split(" ").filter(Boolean).length : 0;
+  const chars = String(message || "").length;
+  const signals = {
+    critico30: hasAny(text, ["uso", "faz 30", "um mês", "um mes", "sem usar"]),
+    retornoUso: hasAny(text, ["volte", "voltar", "retomar", "use novamente", "reativar", "ative", "use a maquininha", "use a permite"]),
+    tpv: hasAny(text, ["tpv", "transacione", "transacionar", "valor transacionado", "vendas no cartao", "vendas no cartão"]),
+    dorParada: hasAny(text, ["parado", "parada", "sem usar", "crítico", "critico", "fora da estrategia", "fora da estratégia"]),
+    perda: hasAny(text, ["perde", "perder", "nao deixe", "não deixe", "deixando de", "oportunidade", "giro"]),
+    beneficioFinanceiro: hasAny(text, ["poder de compra", "caixa", "sem taxa", "antecipacao", "antecipação", "controle", "saldo", "limite"]),
+    estoque: hasAny(text, ["peças", "pecas", "estoque", "repor", "reposicao", "reposição"]),
+    suporte: hasAny(text, ["fale", "vendedor", "atendente", "especialista", "ajuda", "apoio"]),
+    urgencia: hasAny(text, ["hoje", "agora", "aviso", "importante", "prazo", "urgente"]),
+    cta: hasAny(text, ["clique", "fale", "acesse", "use", "utilize", "volte", "transacione", "venda", "ative"]),
+    exclusividade: hasAny(text, ["exclusivo", "exclusiva", "grupo real", "cliente"]),
+  };
+
+  let abordagem = "Alerta de retorno ao uso";
+  if (signals.critico30 && signals.perda) abordagem = "Crítico: uso + aversão à perda";
+  else if (signals.retornoUso && signals.tpv) abordagem = "Retorno ao uso + TPV";
+  else if (signals.dorParada && signals.perda) abordagem = "Aversão à perda: maquininha parada";
+  else if (signals.beneficioFinanceiro && signals.estoque) abordagem = "Poder de compra + reposição";
+  else if (signals.suporte && signals.retornoUso) abordagem = "Apoio consultivo para reativação";
+  else if (signals.urgencia && signals.retornoUso) abordagem = "Urgência para voltar a usar";
+
+  let promessaPrincipal = "Voltar a usar após uso";
+  if (signals.tpv && signals.beneficioFinanceiro) promessaPrincipal = "Transformar TPV em poder de compra";
+  else if (signals.perda) promessaPrincipal = "Evitar perda de giro";
+  else if (signals.estoque) promessaPrincipal = "Voltar a vender para repor peças";
+  else if (signals.suporte) promessaPrincipal = "Apoio para retomar uso";
+
+  let ctaTipo = "Sem CTA claro";
+  if (hasAny(text, ["fale", "vendedor", "atendente"])) ctaTipo = "Falar com vendedor/atendente";
+  else if (hasAny(text, ["use", "utilize", "volte", "transacione"])) ctaTipo = "Voltar a usar / transacionar";
+  else if (hasAny(text, ["clique", "acesse"])) ctaTipo = "Clique / acesso";
+
+  let neuroGatilho = "Baixa ativação persuasiva";
+  if (signals.critico30 && (signals.dorParada || signals.perda)) neuroGatilho = "Alerta de inatividade e aversão à perda";
+  else if (signals.dorParada || signals.perda) neuroGatilho = "Aversão à perda e reativação";
+  else if (signals.retornoUso && signals.tpv) neuroGatilho = "Retorno ao hábito de uso";
+  else if (signals.beneficioFinanceiro) neuroGatilho = "Controle financeiro e poder de compra";
+  else if (signals.suporte) neuroGatilho = "Redução de fricção e segurança";
+  else if (signals.exclusividade) neuroGatilho = "Exclusividade e pertencimento";
+
+  let oportunidadeMarketing = "Reforçar retorno ao uso com CTA claro";
+  if (!signals.critico30) oportunidadeMarketing = "Citar retorno ao uso logo no início para contextualizar a régua";
+  else if (!signals.retornoUso) oportunidadeMarketing = "Abrir a mensagem com convite claro para voltar a usar a maquininha";
+  else if (!signals.tpv) oportunidadeMarketing = "Conectar reativação de uso com TPV transacionado";
+  else if (!signals.perda && !signals.urgencia) oportunidadeMarketing = "Adicionar aversão à perda ou urgência leve";
+  else if (!signals.cta) oportunidadeMarketing = "Incluir CTA direto para transacionar ou falar com vendedor";
+
+  const clarezaScore = (signals.cta ? 1 : 0) + (words >= 10 && words <= 55 ? 1 : 0) + (chars <= 420 ? 1 : 0) + (promessaPrincipal !== "Voltar a usar após uso" ? 1 : 0);
+  const neuroScore = (signals.critico30 ? 1 : 0) + (signals.retornoUso ? 1 : 0) + (signals.tpv ? 1 : 0) + (signals.perda ? 1 : 0) + (signals.beneficioFinanceiro ? 1 : 0) + (signals.cta ? 1 : 0);
+  const sourceFitScore = Math.min(((signals.critico30 ? 1 : 0) + (signals.retornoUso ? 1 : 0) + (signals.perda ? 1 : 0) + (signals.tpv ? 1 : 0) + (signals.cta ? 1 : 0) + (signals.beneficioFinanceiro ? 1 : 0) + (signals.estoque ? 1 : 0)) / 7, 1);
+
+  return {
+    abordagem, promessaPrincipal, ctaTipo, neuroGatilho, oportunidadeMarketing,
+    palavrasMensagem: words, tamanhoMensagem: chars, clarezaScore, neuroScore, sourceFitScore,
+    possuiCritico30: signals.critico30 ? "Sim" : "Não",
+    possuiRetornoUso: signals.retornoUso ? "Sim" : "Não",
+    possuiTPV: signals.tpv ? "Sim" : "Não",
+    possuiPerda: signals.perda ? "Sim" : "Não",
+    possuiDorParada: signals.dorParada ? "Sim" : "Não",
+    possuiBeneficioFinanceiro: signals.beneficioFinanceiro ? "Sim" : "Não",
+    possuiEstoque: signals.estoque ? "Sim" : "Não",
+    possuiSuporte: signals.suporte ? "Sim" : "Não",
+    possuiUrgencia: signals.urgencia ? "Sim" : "Não",
+    possuiCTA: signals.cta ? "Sim" : "Não",
+  };
+}
+
+function findColumn(headers, aliases) {
+  const normalizedHeaders = headers.map((header) => ({ original: header, normalized: normalizeText(header) }));
+  for (const alias of aliases) {
+    const normalizedAlias = normalizeText(alias);
+    const exact = normalizedHeaders.find((header) => header.normalized === normalizedAlias);
+    if (exact) return exact.original;
+  }
+  for (const alias of aliases) {
+    const normalizedAlias = normalizeText(alias);
+    const partial = normalizedHeaders.find((header) => header.normalized.includes(normalizedAlias) || normalizedAlias.includes(header.normalized));
+    if (partial) return partial.original;
+  }
+  return null;
+}
+
+function worksheetToObjects(worksheet) {
+  const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: true });
+  const nonEmptyRows = matrix.filter((line) => Array.isArray(line) && line.some((cell) => String(cell ?? "").trim() !== ""));
+  if (!nonEmptyRows.length) return { rows: [], headerRowIndex: -1, headers: [] };
+  let bestIndex = 0;
+  let bestScore = -1;
+  nonEmptyRows.slice(0, 25).forEach((line, index) => {
+    const headers = line.map((cell) => String(cell ?? "").trim());
+    const score = Object.values(COLUMN_ALIASES).reduce((total, aliases) => total + (findColumn(headers, aliases) ? 1 : 0), 0);
+    if (score > bestScore) { bestScore = score; bestIndex = index; }
+  });
+  const headers = nonEmptyRows[bestIndex].map((cell, index) => String(cell ?? "").trim() || `Coluna ${index + 1}`);
+  const dataRows = nonEmptyRows.slice(bestIndex + 1).map((line) => {
+    const obj = {};
+    headers.forEach((header, index) => { obj[header] = line[index] ?? ""; });
+    return obj;
+  });
+  return { rows: dataRows, headerRowIndex: bestIndex + 1, headers };
+}
+
+function hashText(text) {
+  const normalized = normalizeText(text);
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i += 1) hash = ((hash << 5) - hash + normalized.charCodeAt(i)) | 0;
+  return `critico_modelo_${Math.abs(hash).toString(36).slice(0, 6)}`;
+}
+
+function mapRows(rows) {
+  if (!rows.length) return [];
+  const headers = Object.keys(rows[0] || {});
+  const columns = Object.fromEntries(Object.entries(COLUMN_ALIASES).map(([key, aliases]) => [key, findColumn(headers, aliases)]));
+
+  return rows.map((row, index) => {
+    const textoMensagem = String(row[columns.textoMensagem] ?? "").trim();
+    const auto = classifyCommunication(textoMensagem);
+    const campanha = row[columns.campanha] ?? `Campanha ${index + 1}`;
+    const rawTemplate = String(row[columns.idTemplate] ?? "").trim();
+    const mapped = {
+      id: index,
+      campanha,
+      regua: inferRegua(row[columns.regua], campanha, textoMensagem),
+      dataEnvio: parseDate(row[columns.dataEnvio]),
+      idTemplate: rawTemplate || (textoMensagem ? hashText(textoMensagem) : `Sem ID Template ${index + 1}`),
+      textoMensagem,
+      possuiImagem: normalizeYesNo(row[columns.possuiImagem]),
+      enviados: parseNumber(row[columns.enviados]),
+      erros: parseNumber(row[columns.erros]),
+      recebidos: parseNumber(row[columns.recebidos]),
+      lidos: parseNumber(row[columns.lidos]),
+      tpv: parseNumber(row[columns.tpv]),
+      ...auto,
+    };
+    Object.assign(mapped, analyzePushPreview(mapped.textoMensagem, mapped.possuiImagem));
+
+    const headerSignals = [mapped.campanha, rawTemplate, mapped.textoMensagem, row[columns.enviados], row[columns.lidos], row[columns.tpv]].filter(isHeaderLikeValue).length;
+    const hasRealMetric = mapped.enviados > 0 || mapped.recebidos > 0 || mapped.lidos > 0 || mapped.tpv > 0;
+    const hasRealCopy = normalizeText(mapped.textoMensagem).length > 8 && !isHeaderLikeValue(mapped.textoMensagem);
+    if (headerSignals >= 2 || (!hasRealMetric && !hasRealCopy)) return null;
+
+    const taxaEntrega = safeDiv(mapped.recebidos, mapped.enviados);
+    const taxaErro = safeDiv(mapped.erros, mapped.enviados);
+    const taxaLeitura = safeDiv(mapped.lidos, mapped.recebidos);
+    const engajamentoGeral = safeDiv(mapped.lidos, mapped.enviados);
+    const scoreRetomada = taxaLeitura * 0.28 + taxaEntrega * 0.1 + (1 - taxaErro) * 0.08 + safeDiv(mapped.clarezaScore, 4) * 0.14 + Math.min(safeDiv(mapped.neuroScore, 6), 1) * 0.16 + (mapped.sourceFitScore || 0) * 0.14 + (mapped.pushScore || 0) * 0.1;
+
+    return { ...mapped, taxaEntrega, taxaErro, taxaLeitura, engajamentoGeral, scoreRetomada, naoLidos: Math.max(mapped.recebidos - mapped.lidos, 0) };
+  }).filter((row) => row && (row.enviados || row.recebidos || row.lidos || row.tpv || row.textoMensagem));
+}
+
+function aggregate(rows, groupKey) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = groupKey(row) || "Não informado";
+    if (!map.has(key)) {
+      map.set(key, {
+        nome: key, campanhas: 0, enviados: 0, erros: 0, recebidos: 0, lidos: 0, tpv: 0,
+        scoreTotal: 0, clarezaTotal: 0, neuroTotal: 0, pushTotal: 0, sourceFitTotal: 0, exemplos: [],
+        reguas: new Map(), abordagens: new Map(), promessas: new Map(), ctas: new Map(), neuros: new Map(), oportunidades: new Map(), imagens: new Map()
+      });
+    }
+    const item = map.get(key);
+    item.campanhas += 1;
+    item.enviados += row.enviados || 0;
+    item.erros += row.erros || 0;
+    item.recebidos += row.recebidos || 0;
+    item.lidos += row.lidos || 0;
+    item.tpv += row.tpv || 0;
+    item.scoreTotal += row.scoreRetomada || 0;
+    item.clarezaTotal += row.clarezaScore || 0;
+    item.neuroTotal += row.neuroScore || 0;
+    item.pushTotal += row.pushScore || 0;
+    item.sourceFitTotal += row.sourceFitScore || 0;
+    if (row.textoMensagem && item.exemplos.length < 2) item.exemplos.push(row.textoMensagem);
+    item.reguas.set(row.regua, (item.reguas.get(row.regua) || 0) + 1);
+    item.abordagens.set(row.abordagem, (item.abordagens.get(row.abordagem) || 0) + 1);
+    item.promessas.set(row.promessaPrincipal, (item.promessas.get(row.promessaPrincipal) || 0) + 1);
+    item.ctas.set(row.ctaTipo, (item.ctas.get(row.ctaTipo) || 0) + 1);
+    item.neuros.set(row.neuroGatilho, (item.neuros.get(row.neuroGatilho) || 0) + 1);
+    item.oportunidades.set(row.oportunidadeMarketing, (item.oportunidades.get(row.oportunidadeMarketing) || 0) + 1);
+    item.imagens.set(row.possuiImagem, (item.imagens.get(row.possuiImagem) || 0) + 1);
+  });
+  return Array.from(map.values()).map((item) => {
+    const topEntry = (mapObj) => Array.from(mapObj.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "Não informado";
+    const taxaEntrega = safeDiv(item.recebidos, item.enviados);
+    const taxaErro = safeDiv(item.erros, item.enviados);
+    const taxaLeitura = safeDiv(item.lidos, item.recebidos);
+    return {
+      ...item,
+      taxaEntrega, taxaErro, taxaLeitura, engajamentoGeral: safeDiv(item.lidos, item.enviados),
+      resultadoPorLido: safeDiv(item.tpv, item.lidos), scoreRetomada: safeDiv(item.scoreTotal, item.campanhas),
+      clarezaMedia: safeDiv(item.clarezaTotal, item.campanhas), neuroMedia: safeDiv(item.neuroTotal, item.campanhas),
+      pushMedio: safeDiv(item.pushTotal, item.campanhas), sourceFitMedio: safeDiv(item.sourceFitTotal, item.campanhas),
+      reguaPrincipal: topEntry(item.reguas), abordagemPrincipal: topEntry(item.abordagens), promessaPrincipal: topEntry(item.promessas),
+      ctaPrincipal: topEntry(item.ctas), neuroPrincipal: topEntry(item.neuros), oportunidadePrincipal: topEntry(item.oportunidades), imagemPrincipal: topEntry(item.imagens),
+    };
+  });
+}
+
+function MetricCard({ title, value, detail, icon }) {
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{title}</p>
+          <p className="mt-2 text-2xl font-bold text-[#262626]">{value}</p>
+          {detail && <p className="mt-1 text-sm text-zinc-500">{detail}</p>}
+        </div>
+        <div className="rounded-2xl bg-[#dd2145]/10 p-3 text-[#dd2145] text-xl">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+function ChartCard({ title, subtitle, source, analysis, children }) {
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <h3 className="text-base font-bold text-[#262626]">{title}</h3>
+        {subtitle && <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>}
+        {source && <div className="mt-3 rounded-2xl bg-[#dd2145]/5 p-3 text-xs leading-5 text-zinc-700 ring-1 ring-[#dd2145]/10"><span className="font-bold text-[#dd2145]">Fonte metodológica: </span>{source}</div>}
+      </div>
+      <div className="h-80">{children}</div>
+      {analysis && (
+        <div className="mt-4 rounded-2xl bg-zinc-50 p-4 text-sm leading-6 text-zinc-700 ring-1 ring-zinc-100">
+          <p className="mb-1 font-bold text-[#262626]">Análise do gráfico</p>
+          <p>{analysis}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="max-w-sm rounded-xl border border-zinc-200 bg-white p-3 text-sm shadow-lg">
+      <p className="mb-2 font-bold text-[#262626]">{label}</p>
+      {payload.map((item) => {
+        const lower = String(item.name || item.dataKey || "").toLowerCase();
+        const isPct = lower.includes("taxa") || lower.includes("score") || lower.includes("engajamento") || lower.includes("prévia") || lower.includes("previa");
+        const isMoney = lower.includes("tpv") || lower.includes("valor") || lower.includes("transacionado") || lower.includes("resultado");
+        return <p key={`${item.name}-${item.dataKey}`} className="text-zinc-700"><span className="font-semibold">{item.name}: </span>{isMoney ? money(item.value) : isPct ? pct(item.value) : num(item.value)}</p>;
+      })}
+    </div>
+  );
+}
+
+function UploadBox({ onUpload, error, info }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-[#dd2145]/40 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="rounded-2xl bg-[#dd2145]/10 p-3 text-[#dd2145] text-2xl">📊</div>
+          <div>
+            <h2 className="text-lg font-bold text-[#262626]">Subir planilha da Régua Crítico</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-600">O dashboard lê as mensagens enviadas para clientes há queda ou ausência de uso da maquininha e cruza engajamento com TPV para medir reativação de uso da PERmite.</p>
+          </div>
+        </div>
+        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#dd2145] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#c51d3d]">⬆️ Carregar planilha<input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => onUpload(event.target.files?.[0])} /></label>
+      </div>
+      <div className="mt-5 rounded-2xl bg-zinc-50 p-4">
+        <p className="text-sm font-bold text-[#262626]">Colunas recomendadas</p>
+        <div className="mt-2 flex flex-wrap gap-2">{REQUIRED_FIELDS.map((field) => <span key={field} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-zinc-600 ring-1 ring-zinc-200">{field}</span>)}</div>
+        <p className="mt-3 text-xs text-zinc-500">A coluna “TPV” deve conter o valor transacionado na PERmite após a comunicação. O dashboard também aceita “Resultado TPV” ou “Resultado”.</p>
+      </div>
+      {info && <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">{info}</div>}
+      {error && <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+    </div>
+  );
+}
+
+function DashboardReguaCriticoPERmite() {
+  const [rows, setRows] = useState(DEMO_DATA.map((row, index) => ({ ...row, id: index })));
+  const [fileName, setFileName] = useState("Base demonstrativa");
+  const [uploadError, setUploadError] = useState("");
+  const [uploadInfo, setUploadInfo] = useState("Pronto para receber sua planilha. O leitor detecta automaticamente a linha de cabeçalho e a coluna TPV.");
+  const [search, setSearch] = useState("");
+  const [template, setTemplate] = useState("Todos");
+  const [regua, setRegua] = useState("Todos");
+  const [abordagem, setAbordagem] = useState("Todos");
+  const [promessa, setPromessa] = useState("Todos");
+  const [imagem, setImagem] = useState("Todos");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [minRecebidos, setMinRecebidos] = useState(0);
+
+  const data = useMemo(() => mapRows(rows), [rows]);
+  const filtered = useMemo(() => {
+    const query = normalizeText(search);
+    return data.filter((row) => {
+      const matchSearch = !query || normalizeText(row.campanha).includes(query) || normalizeText(row.idTemplate).includes(query) || normalizeText(row.textoMensagem).includes(query) || normalizeText(row.abordagem).includes(query) || normalizeText(row.promessaPrincipal).includes(query);
+      return matchSearch &&
+        (template === "Todos" || row.idTemplate === template) &&
+        (regua === "Todos" || row.regua === regua) &&
+        (abordagem === "Todos" || row.abordagem === abordagem) &&
+        (promessa === "Todos" || row.promessaPrincipal === promessa) &&
+        (imagem === "Todos" || row.possuiImagem === imagem) &&
+        (!dateStart || row.dataEnvio >= dateStart) &&
+        (!dateEnd || row.dataEnvio <= dateEnd);
+    });
+  }, [data, search, template, regua, abordagem, promessa, imagem, dateStart, dateEnd]);
+
+  const options = useMemo(() => {
+    const templates = Array.from(new Set(data.map((row) => row.idTemplate).filter((value) => !isInvalidTemplateValue(value)))).sort();
+    const reguas = Array.from(new Set(data.map((row) => row.regua || "Crítico"))).sort();
+    const abordagens = Array.from(new Set(data.map((row) => row.abordagem || "Não informado"))).sort();
+    const promessas = Array.from(new Set(data.map((row) => row.promessaPrincipal || "Não informado"))).sort();
+    const imagens = Array.from(new Set(data.map((row) => row.possuiImagem || "Não informado"))).sort();
+    return { templates: ["Todos", ...templates], reguas: ["Todos", ...reguas], abordagens: ["Todos", ...abordagens], promessas: ["Todos", ...promessas], imagens: ["Todos", ...imagens] };
+  }, [data]);
+
+  const totals = useMemo(() => {
+    const base = filtered.reduce((acc, row) => {
+      acc.campanhas += 1; acc.enviados += row.enviados; acc.erros += row.erros; acc.recebidos += row.recebidos; acc.lidos += row.lidos; acc.tpv += row.tpv; acc.scoreTotal += row.scoreRetomada; acc.pushTotal += row.pushScore || 0; return acc;
+    }, { campanhas: 0, enviados: 0, erros: 0, recebidos: 0, lidos: 0, tpv: 0, scoreTotal: 0, pushTotal: 0 });
+    return { ...base, taxaEntrega: safeDiv(base.recebidos, base.enviados), taxaErro: safeDiv(base.erros, base.enviados), taxaLeitura: safeDiv(base.lidos, base.recebidos), engajamentoGeral: safeDiv(base.lidos, base.enviados), scoreRetomada: safeDiv(base.scoreTotal, base.campanhas), pushMedio: safeDiv(base.pushTotal, base.campanhas) };
+  }, [filtered]);
+
+  const byTemplate = useMemo(() => aggregate(filtered, (row) => row.idTemplate).filter((item) => item.recebidos >= minRecebidos && !isInvalidTemplateValue(item.nome)).sort((a, b) => b.tpv - a.tpv), [filtered, minRecebidos]);
+  const byRegua = useMemo(() => aggregate(filtered, (row) => row.regua).filter((item) => item.recebidos >= minRecebidos).sort((a, b) => b.tpv - a.tpv), [filtered, minRecebidos]);
+  const byAbordagem = useMemo(() => aggregate(filtered, (row) => row.abordagem).filter((item) => item.recebidos >= minRecebidos).sort((a, b) => b.scoreRetomada - a.scoreRetomada), [filtered, minRecebidos]);
+  const byPromessa = useMemo(() => aggregate(filtered, (row) => row.promessaPrincipal).filter((item) => item.recebidos >= minRecebidos).sort((a, b) => b.tpv - a.tpv), [filtered, minRecebidos]);
+  const byNeuro = useMemo(() => aggregate(filtered, (row) => row.neuroGatilho).filter((item) => item.recebidos >= minRecebidos).sort((a, b) => b.scoreRetomada - a.scoreRetomada), [filtered, minRecebidos]);
+  const byCTA = useMemo(() => aggregate(filtered, (row) => row.ctaTipo).filter((item) => item.recebidos >= minRecebidos).sort((a, b) => b.scoreRetomada - a.scoreRetomada), [filtered, minRecebidos]);
+  const byImagem = useMemo(() => aggregate(filtered, (row) => row.possuiImagem).sort((a, b) => b.tpv - a.tpv), [filtered]);
+  const scatterData = useMemo(() => byTemplate.map((item) => ({ ...item, x: item.lidos, y: item.tpv, z: item.campanhas })), [byTemplate]);
+
+  const pushPreviewSummary = useMemo(() => {
+    const total = filtered.length;
+    if (!total) return { scoreMedio: 0, weakRate: 0, mediaRiskRate: 0, topTemplates: [], mainTitle: "Sem dados suficientes", mainText: "Carregue uma base com texto da mensagem para analisar a prévia push.", directive: "Abrir com retorno ao uso, perda evitada ou ação clara." };
+    const scoreMedio = safeDiv(filtered.reduce((acc, row) => acc + (row.pushScore || 0), 0), total);
+    const weakRate = safeDiv(filtered.filter((row) => row.pushStartsWeak === "Sim").length, total);
+    const mediaRiskRate = safeDiv(filtered.filter((row) => row.pushMediaRisk === "Sim").length, total);
+    const actionRate = safeDiv(filtered.filter((row) => row.pushHasActionIn50 === "Sim").length, total);
+    const riskRate = safeDiv(filtered.filter((row) => row.pushHasRiskIn50 === "Sim").length, total);
+    const templateMap = new Map();
+    filtered.forEach((row) => {
+      const key = row.idTemplate || "Sem ID Template";
+      if (!templateMap.has(key)) templateMap.set(key, { nome: key, campanhas: 0, pushScoreTotal: 0, tpv: 0, lidos: 0, recebidos: 0, preview: row.pushPreview50, diretiva: row.pushDiretiva });
+      const item = templateMap.get(key); item.campanhas += 1; item.pushScoreTotal += row.pushScore || 0; item.tpv += row.tpv || 0; item.lidos += row.lidos || 0; item.recebidos += row.recebidos || 0;
+    });
+    const topTemplates = Array.from(templateMap.values()).map((item) => ({ ...item, pushScoreMedio: safeDiv(item.pushScoreTotal, item.campanhas), taxaLeitura: safeDiv(item.lidos, item.recebidos) })).sort((a, b) => b.pushScoreMedio - a.pushScoreMedio || b.tpv - a.tpv).slice(0, 3);
+    let mainTitle = "Prévia push com oportunidade";
+    let mainText = `Score médio da prévia: ${pct(scoreMedio)}. Ação clara nos primeiros 50 caracteres: ${pct(actionRate)}.`;
+    let directive = "Abrir com o retorno ao uso e convite direto para voltar a transacionar.";
+    if (scoreMedio >= 0.75) { mainTitle = "Prévia push forte"; mainText = "A maior parte dos templates entrega contexto, ação e motivo de retorno logo na notificação."; directive = "Manter o padrão: retorno ao uso, ação clara e pouco desperdício com saudação."; }
+    else if (weakRate > 0.25) { mainTitle = "Abertura desperdiça espaço"; mainText = `${pct(weakRate)} das mensagens começam com abertura fraca ou saudação.`; directive = "Substituir abertura genérica por: Volte a usar, Sua PERmite está parada, Volte a usar hoje."; }
+    else if (riskRate < 0.4) { mainTitle = "Pouca aversão à perda"; mainText = `Só ${pct(riskRate)} das mensagens trazem perda evitada na prévia.`; directive = "Testar retorno ao uso, venda fora da estratégia ou maquininha parada nos primeiros 50 caracteres."; }
+    return { scoreMedio, weakRate, mediaRiskRate, actionRate, riskRate, topTemplates, mainTitle, mainText, directive };
+  }, [filtered]);
+
+  const topGatilhos = useMemo(() => {
+    const totalLidos = filtered.reduce((acc, row) => acc + (row.lidos || 0), 0);
+    const triggerRules = [
+      { nome: "Alerta retorno ao uso", check: (row) => row.possuiCritico30 === "Sim" },
+      { nome: "Retorno ao uso", check: (row) => row.possuiRetornoUso === "Sim" },
+      { nome: "Aversão à perda", check: (row) => row.possuiPerda === "Sim" || row.possuiDorParada === "Sim" },
+      { nome: "TPV / transação", check: (row) => row.possuiTPV === "Sim" },
+      { nome: "Poder de compra", check: (row) => row.possuiBeneficioFinanceiro === "Sim" },
+      { nome: "Reposição / estoque", check: (row) => row.possuiEstoque === "Sim" },
+      { nome: "CTA claro", check: (row) => row.possuiCTA === "Sim" },
+      { nome: "Suporte do vendedor", check: (row) => row.possuiSuporte === "Sim" },
+    ];
+    return triggerRules.map((rule) => {
+      const matchedRows = filtered.filter((row) => rule.check(row));
+      if (!matchedRows.length) return null;
+      const campanhas = matchedRows.length;
+      const enviados = matchedRows.reduce((acc, row) => acc + (row.enviados || 0), 0);
+      const recebidos = matchedRows.reduce((acc, row) => acc + (row.recebidos || 0), 0);
+      const lidos = matchedRows.reduce((acc, row) => acc + (row.lidos || 0), 0);
+      const tpv = matchedRows.reduce((acc, row) => acc + (row.tpv || 0), 0);
+      const taxaLeitura = safeDiv(lidos, recebidos);
+      const participacaoLeitura = safeDiv(lidos, totalLidos);
+      const efetividadeResposta = taxaLeitura * 0.6 + participacaoLeitura * 0.25 + safeDiv(campanhas, filtered.length) * 0.15;
+      const templatesReferencia = aggregate(matchedRows, (row) => row.idTemplate).sort((a, b) => b.tpv - a.tpv).slice(0, 2).map((item) => item.nome).join(" + ") || "Não informado";
+      return { nome: rule.nome, campanhas, enviados, recebidos, lidos, tpv, taxaLeitura, participacaoLeitura, efetividadeResposta, templatesReferencia };
+    }).filter(Boolean).sort((a, b) => b.efetividadeResposta - a.efetividadeResposta || b.lidos - a.lidos).slice(0, 3);
+  }, [filtered]);
+
+  const ranking = useMemo(() => [...byTemplate].sort((a, b) => b.tpv - a.tpv || b.lidos - a.lidos || b.taxaLeitura - a.taxaLeitura).slice(0, 2), [byTemplate]);
+
+  const healthSummary = useMemo(() => {
+    const campanhas = filtered.length;
+    const enviados = filtered.reduce((acc, row) => acc + (row.enviados || 0), 0);
+    const erros = filtered.reduce((acc, row) => acc + (row.erros || 0), 0);
+    const recebidos = filtered.reduce((acc, row) => acc + (row.recebidos || 0), 0);
+    const lidos = filtered.reduce((acc, row) => acc + (row.lidos || 0), 0);
+    const clarezaTotal = filtered.reduce((acc, row) => acc + (row.clarezaScore || 0), 0);
+    const neuroTotal = filtered.reduce((acc, row) => acc + (row.neuroScore || 0), 0);
+    const forcaLeitura = safeDiv(lidos, recebidos);
+    const saudeEntrega = safeDiv(recebidos, enviados);
+    const riscoOperacional = safeDiv(erros, enviados);
+    const clarezaPersuasiva = safeDiv(clarezaTotal, campanhas * 4);
+    const forcaNeuro = safeDiv(neuroTotal, campanhas * 6);
+    const leituraNivel = forcaLeitura >= 0.75 ? "forte" : forcaLeitura >= 0.6 ? "boa" : forcaLeitura >= 0.45 ? "moderada" : "baixa";
+    const entregaNivel = saudeEntrega >= 0.85 ? "saudável" : saudeEntrega >= 0.7 ? "aceitável" : "sensível";
+    const riscoNivel = riscoOperacional <= 0.08 ? "baixo" : riscoOperacional <= 0.2 ? "moderado" : "alto";
+    const clarezaNivel = clarezaPersuasiva >= 0.75 ? "forte" : clarezaPersuasiva >= 0.6 ? "boa" : clarezaPersuasiva >= 0.45 ? "moderada" : "baixa";
+    return [
+      { titulo: "Força de leitura da régua", valor: pct(forcaLeitura), texto: `Leitura ${leituraNivel}. Pela lógica de NeuroMap e GaryVee, a régua ganha força quando o retorno ao uso aparece rápido e entrega motivo claro para voltar a usar a PERmite.` },
+      { titulo: "Saúde da entrega", valor: pct(saudeEntrega), texto: `Entrega ${entregaNivel}. Se a entrega cai, o problema pode estar mais na base, disparo ou qualidade dos contatos do que na copy.` },
+      { titulo: "Risco operacional", valor: pct(riscoOperacional), texto: `Risco ${riscoNivel}. Taxa de erro elevada distorce leitura e TPV, porque reduz a amostra real exposta à comunicação.` },
+      { titulo: "Clareza persuasiva", valor: pct(clarezaPersuasiva), texto: `Clareza ${clarezaNivel}. Com base em Kotler, Seth Godin e esforço cognitivo, a mensagem precisa comunicar contexto, valor, ação e relevância sem exigir interpretação demais do cliente. Força neuro média: ${pct(forcaNeuro)}.` },
+    ];
+  }, [filtered]);
+
+  const insights = useMemo(() => {
+    const bestTemplate = byTemplate[0]; const bestRegua = byRegua[0]; const bestNeuro = byNeuro[0]; const bestCTA = byCTA[0]; const bestPromessa = byPromessa[0];
+    const list = [];
+    if (bestTemplate) list.push(`O template com maior TPV foi “${bestTemplate.nome}”, gerando ${money(bestTemplate.tpv)}. Esse modelo deve ser usado como referência para novas variações da Régua Crítico.`);
+    if (bestRegua) list.push(`A régua com maior resposta em TPV foi “${bestRegua.nome}”, com ${money(bestRegua.tpv)} e ${pct(bestRegua.taxaLeitura)} de leitura.`);
+    if (bestNeuro) list.push(`O gatilho de neuromarketing mais forte foi “${bestNeuro.nome}”. Para umclientes inativos e críticos, ele deve orientar a próxima rodada de mensagens.`);
+    if (bestCTA) list.push(`O CTA com melhor desempenho foi “${bestCTA.nome}”. Para clientes em Crítico, o próximo passo precisa ser direto e fácil de executar.`);
+    if (bestPromessa) list.push(`A promessa mais associada ao retorno de uso foi “${bestPromessa.nome}”. Ela deve aparecer com mais clareza nos primeiros pontos da copy.`);
+    list.push("Oportunidade estratégica: testar copies que comecem explicitamente com ‘uso sem usar’ versus copies que começam com perda de giro ou poder de compra.");
+    return list;
+  }, [byTemplate, byRegua, byNeuro, byCTA, byPromessa]);
+
+  const bestDirection = useMemo(() => {
+    const template = byTemplate[0]?.nome || "template de maior TPV";
+    const gatilho = byNeuro[0]?.nome || "retorno ao uso";
+    const cta = byCTA[0]?.nome || "voltar a usar / transacionar";
+    return { headline: "Priorizar mensagens que transformam alerta em reativação de uso", body: `A melhor direção é combinar o template “${template}” com o gatilho “${gatilho}”. A mensagem precisa mostrar por que retorno ao uso é um sinal de crítico, conectar TPV a poder de compra e reduzir a fricção de reativação.`, action: `Próximo teste recomendado: variações com CTA “${cta}”, abrindo a copy com retorno ao uso, perda evitada ou convite direto para voltar a transacionar.` };
+  }, [byTemplate, byNeuro, byCTA]);
+
+  const performanceAnalysis = useMemo(() => {
+    if (!byTemplate.length) return { titulo: "Sem dados suficientes", resumo: "Carregue uma base com TPV para gerar análise.", pontos: [], direcao: "" };
+    const maiorTPV = [...byTemplate].sort((a, b) => b.tpv - a.tpv)[0];
+    const maiorLeitura = [...byTemplate].sort((a, b) => b.taxaLeitura - a.taxaLeitura)[0];
+    const melhorScore = [...byTemplate].sort((a, b) => b.scoreRetomada - a.scoreRetomada)[0];
+    return { titulo: `Maior TPV: ${maiorTPV.nome}`, resumo: `${maiorTPV.nome} gerou ${money(maiorTPV.tpv)} em TPV. ${maiorLeitura.nome} teve a maior força de leitura, com ${pct(maiorLeitura.taxaLeitura)}.`, pontos: [`Maior TPV transacionado: ${maiorTPV.nome} (${money(maiorTPV.tpv)}).`, `Maior leitura proporcional: ${maiorLeitura.nome} (${pct(maiorLeitura.taxaLeitura)}).`, `Melhor score de reativação: ${melhorScore.nome} (${pct(melhorScore.scoreRetomada)}).`], direcao: "Para esta régua, o dado mais estratégico é leitura acompanhada de TPV. A comunicação boa é aquela que tira o cliente do estado crítico e leva ao retorno real da maquininha." };
+  }, [byTemplate]);
+
+  const chartAnalyses = useMemo(() => {
+    const topTemplate = byTemplate[0];
+    const topRegua = byRegua[0];
+    const topNeuro = byNeuro[0];
+    const topPromessa = byPromessa[0];
+    const topCTA = byCTA[0];
+    const imagemTop = byImagem[0];
+    const imagemBottom = byImagem[1];
+    const maiorLeitura = [...byTemplate].sort((a, b) => b.taxaLeitura - a.taxaLeitura)[0];
+    const maiorTPV = [...byTemplate].sort((a, b) => b.tpv - a.tpv)[0];
+
+    return {
+      tpvTemplate: topTemplate
+        ? `O template “${topTemplate.nome}” lidera em TPV com ${money(topTemplate.tpv)}. A leitura estratégica é usar esse modelo como referência de copy e criar variações com a mesma promessa, ajustando abertura e CTA para validar se o retorno vem da mensagem ou do volume da base.`
+        : "Ainda não há dados suficientes para identificar o template com maior TPV.",
+      regua: topRegua
+        ? `A régua “${topRegua.nome}” concentra o maior retorno, com ${money(topRegua.tpv)} e ${pct(topRegua.taxaLeitura)} de leitura. Essa comparação ajuda a separar clientes críticos de inativos e mostra onde a retomada de uso está mais forte.`
+        : "Ainda não há dados suficientes para comparar Inativo e Crítico.",
+      gatilho: topNeuro
+        ? `O gatilho “${topNeuro.nome}” apresenta o maior score de reativação, com ${pct(topNeuro.scoreRetomada)}. A próxima rodada deve priorizar esse mecanismo persuasivo e reduzir argumentos secundários que aumentam esforço cognitivo.`
+        : "Ainda não há dados suficientes para avaliar gatilhos de neuromarketing.",
+      promessa: topPromessa
+        ? `A promessa “${topPromessa.nome}” lidera em TPV com ${money(topPromessa.tpv)}. Isso indica qual promessa conecta melhor a dor do cliente crítico com a ação de voltar a transacionar na PERmite.`
+        : "Ainda não há dados suficientes para avaliar promessa principal.",
+      cta: topCTA
+        ? `O CTA “${topCTA.nome}” tem o melhor score de reativação, com ${pct(topCTA.scoreRetomada)}. Para clientes críticos, o CTA precisa reduzir fricção e apontar uma ação simples: voltar a usar, transacionar ou falar com vendedor.`
+        : "Ainda não há dados suficientes para avaliar CTA.",
+      imagem: imagemTop
+        ? `O formato “${imagemTop.nome}” lidera em TPV com ${money(imagemTop.tpv)}. ${imagemBottom ? `Comparado a “${imagemBottom.nome}”, a diferença deve ser lida junto da taxa de leitura, porque imagem pode aumentar impacto visual, mas também esconder parte da prévia no WhatsApp.` : "A amostra ainda não permite comparação completa entre com imagem e sem imagem."}`
+        : "Ainda não há dados suficientes para comparar imagem e texto.",
+      leituraTPV: maiorLeitura && maiorTPV
+        ? `O cruzamento mostra se leitura acompanha TPV. Maior leitura: “${maiorLeitura.nome}” com ${pct(maiorLeitura.taxaLeitura)}. Maior TPV: “${maiorTPV.nome}” com ${money(maiorTPV.tpv)}. Quando esses dois líderes são diferentes, a régua precisa testar a copy de maior leitura com a promessa do maior TPV.`
+        : "Ainda não há dados suficientes para cruzar leitura e TPV.",
+    };
+  }, [byTemplate, byRegua, byNeuro, byPromessa, byCTA, byImagem]);
+
+  const handleUpload = async (file) => {
+    if (!file) return;
+    setUploadError(""); setUploadInfo("Lendo arquivo e procurando cabeçalho automaticamente...");
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+      let selected = null;
+      for (const sheetName of workbook.SheetNames) {
+        const parsed = worksheetToObjects(workbook.Sheets[sheetName]);
+        const mapped = mapRows(parsed.rows);
+        const validCount = mapped.filter((row) => row && (row.enviados || row.recebidos || row.lidos || row.tpv || row.textoMensagem)).length;
+        if (validCount > 0) { selected = { sheetName, parsed, validCount }; break; }
+      }
+      if (!selected) { setUploadError("Não consegui encontrar uma aba válida. Confira se a planilha tem enviados, recebidos, lidos, texto da mensagem e TPV."); setUploadInfo("Leitura concluída, mas nenhuma aba bateu com a estrutura esperada."); return; }
+      setRows(selected.parsed.rows); setFileName(file.name); setSearch(""); setTemplate("Todos"); setRegua("Todos"); setAbordagem("Todos"); setPromessa("Todos"); setImagem("Todos"); setDateStart(""); setDateEnd("");
+      setUploadInfo(`Arquivo carregado: ${file.name}. Aba usada: ${selected.sheetName}. Cabeçalho detectado na linha ${selected.parsed.headerRowIndex}. Registros válidos: ${selected.validCount}.`);
+    } catch (error) {
+      console.error(error);
+      setUploadError("Não consegui ler esse arquivo. Salve como .xlsx ou .csv e tente novamente."); setUploadInfo("Falha na leitura do arquivo.");
+    }
+  };
+
+  const resetDemo = () => { setRows(DEMO_DATA.map((row, index) => ({ ...row, id: index }))); setFileName("Base demonstrativa"); setUploadError(""); setUploadInfo("Base demonstrativa restaurada."); };
+
+  return (
+    <div className="min-h-screen bg-zinc-50 p-4 text-[#262626] md:p-8">
+      <div className="mx-auto max-w-7xl">
+        <header className="overflow-hidden rounded-3xl bg-[#262626] p-6 text-white shadow-sm md:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#dd2145]">WhatsApp PERmite</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight md:text-5xl">Dashboard Estratégico | Régua Crítico</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-300 md:text-base">Análise das mensagens enviadas para clientes inativos ou críticos, cruzando engajamento com TPV para gerar insights de melhoria da comunicação e reativação de uso da PERmite.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-400">Arquivo atual</p>
+              <p className="mt-1 max-w-xs truncate text-xl font-bold">{fileName}</p>
+              <p className="mt-1 text-sm text-zinc-300">{num(data.length)} campanhas carregadas</p>
+            </div>
+          </div>
+        </header>
+
+        <section className="mt-6"><UploadBox onUpload={handleUpload} error={uploadError} info={uploadInfo} /></section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex items-center gap-2 text-[#dd2145]"><span>🔎</span><h2 className="font-bold text-[#262626]">Filtros estratégicos</h2></div>
+          <div className="grid gap-3 md:grid-cols-6">
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">Régua</span><select value={regua} onChange={(e) => setRegua(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:border-[#dd2145]">{options.reguas.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">ID Template</span><select value={template} onChange={(e) => setTemplate(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:border-[#dd2145]">{options.templates.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">Abordagem</span><select value={abordagem} onChange={(e) => setAbordagem(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:border-[#dd2145]">{options.abordagens.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">Promessa</span><select value={promessa} onChange={(e) => setPromessa(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:border-[#dd2145]">{options.promessas.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">Imagem</span><select value={imagem} onChange={(e) => setImagem(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:border-[#dd2145]">{options.imagens.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">Mín. recebidos</span><input type="number" min="0" value={minRecebidos} onChange={(e) => setMinRecebidos(parseNumber(e.target.value))} className="w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:border-[#dd2145]" /></label>
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">Data início</span><input type="date" value={dateStart} onChange={(e) => setDateStart(e.target.value)} className="w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:border-[#dd2145]" /></label>
+            <label className="text-sm"><span className="mb-1 block font-semibold text-zinc-600">Data fim</span><input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} className="w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:border-[#dd2145]" /></label>
+            <label className="text-sm md:col-span-3"><span className="mb-1 block font-semibold text-zinc-600">Buscar</span><div className="flex items-center rounded-xl border border-zinc-200 px-3 py-2 focus-within:border-[#dd2145]"><span className="mr-2 text-zinc-400">🔍</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ex.: uso, crítico, sem usar, volte, TPV, maquininha parada..." className="w-full outline-none" /></div></label>
+            <div className="flex items-end gap-2"><button onClick={resetDemo} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm font-semibold text-zinc-600 transition hover:border-[#dd2145] hover:text-[#dd2145]">↻ Restaurar demonstração</button></div>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+            <div><div className="flex items-center gap-2"><span className="text-[#dd2145]">👁️</span><h3 className="font-bold">Efetividade da prévia push | retorno ao uso</h3></div><p className="mt-1 max-w-4xl text-sm leading-6 text-zinc-600">Analisa se os primeiros 35 a 50 caracteres entregam o retorno ao uso, uma ação clara ou uma perda evitada.</p></div>
+            <div className="rounded-2xl bg-[#dd2145]/5 p-4 text-sm leading-6 text-zinc-700 ring-1 ring-[#dd2145]/10 lg:max-w-sm"><p className="font-bold text-[#262626]">{pushPreviewSummary.mainTitle}</p><p className="mt-1">{pushPreviewSummary.mainText}</p></div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-5">
+            <div className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Score prévia</p><p className="mt-2 text-2xl font-bold text-[#dd2145]">{pct(pushPreviewSummary.scoreMedio)}</p><p className="mt-2 text-sm leading-6 text-zinc-600">Força média dos primeiros 50 caracteres.</p></div>
+            <div className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Ação até 50</p><p className="mt-2 text-2xl font-bold text-[#262626]">{pct(pushPreviewSummary.actionRate)}</p><p className="mt-2 text-sm leading-6 text-zinc-600">Mensagens com convite claro para voltar a usar.</p></div>
+            <div className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Perda evitada</p><p className="mt-2 text-2xl font-bold text-[#262626]">{pct(pushPreviewSummary.riskRate)}</p><p className="mt-2 text-sm leading-6 text-zinc-600">Mensagens que trazem risco, perda, retorno ao uso ou maquininha parada.</p></div>
+            <div className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Abertura fraca</p><p className="mt-2 text-2xl font-bold text-[#262626]">{pct(pushPreviewSummary.weakRate)}</p><p className="mt-2 text-sm leading-6 text-zinc-600">Começos que desperdiçam espaço da notificação.</p></div>
+            <div className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Risco mídia</p><p className="mt-2 text-2xl font-bold text-[#262626]">{pct(pushPreviewSummary.mediaRiskRate)}</p><p className="mt-2 text-sm leading-6 text-zinc-600">Mensagens com imagem, que podem esconder a prévia textual.</p></div>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">{pushPreviewSummary.topTemplates.map((item, index) => <div key={item.nome} className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">#{index + 1} melhor prévia</p><p className="mt-2 font-bold text-[#262626]">{item.nome}</p><div className="mt-3 rounded-xl bg-zinc-50 p-3 text-sm leading-6 text-zinc-700 ring-1 ring-zinc-100">“{item.preview}”</div><div className="mt-3 grid grid-cols-3 gap-2 text-xs"><div className="rounded-xl bg-zinc-50 p-2"><p className="text-zinc-500">Prévia</p><p className="font-bold text-[#dd2145]">{pct(item.pushScoreMedio)}</p></div><div className="rounded-xl bg-zinc-50 p-2"><p className="text-zinc-500">Leitura</p><p className="font-bold">{pct(item.taxaLeitura)}</p></div><div className="rounded-xl bg-zinc-50 p-2"><p className="text-zinc-500">TPV</p><p className="font-bold">{money(item.tpv)}</p></div></div><p className="mt-3 text-xs leading-5 text-zinc-500"><span className="font-bold text-[#262626]">Diretiva:</span> {item.diretiva}</p></div>)}</div>
+          <div className="mt-4 rounded-2xl bg-[#262626] p-4 text-sm leading-6 text-white"><span className="font-bold text-[#dd2145]">Diretiva estratégica:</span> {pushPreviewSummary.directive}</div>
+        </section>
+
+        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="TPV gerado" value={money(totals.tpv)} detail="Valor transacionado após comunicação" icon="💳" />
+          <MetricCard title="Abertura/leitura" value={pct(totals.taxaLeitura)} detail={`${num(totals.lidos)} lidos`} icon="👁️" />
+          <MetricCard title="Score de reativação" value={pct(totals.scoreRetomada)} detail="Leitura + clareza + TPV" icon="📈" />
+          <MetricCard title="Taxa de entrega" value={pct(totals.taxaEntrega)} detail={`${num(totals.recebidos)} recebidos`} icon="✅" />
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2"><span className="text-[#dd2145]">🧠</span><h3 className="font-bold">Fundamentação metodológica da análise</h3></div>
+          <p className="mb-4 text-sm leading-6 text-zinc-600">A Régua Crítico analisa clientes inativos ou com queda de uso. O objetivo é entender se a mensagem gera identificação, crítico e reativação de transação. O TPV funciona como sinal de que o cliente percebeu a comunicação e voltou a movimentar a PERmite.</p>
+          <div className="grid gap-4 md:grid-cols-4">{METHODOLOGY_FRAMEWORK.map((item) => <div key={item.eixo} className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{item.base}</p><p className="mt-2 text-base font-bold text-[#262626]">{item.eixo}</p><p className="mt-2 text-sm leading-6 text-zinc-600">{item.aplicacao}</p></div>)}</div>
+          <div className="mt-4 rounded-2xl bg-[#dd2145]/5 p-4 text-sm leading-6 text-zinc-700 ring-1 ring-[#dd2145]/10">Hipótese central: mensagens que contextualizam retorno ao uso, mostram perda de giro e oferecem um próximo passo simples tendem a estimular maior reativação de TPV na PERmite.</div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2"><span className="text-[#dd2145]">🏆</span><h3 className="font-bold">Top 3 gatilhos com maior força de resposta</h3></div>
+          <p className="mb-4 text-sm leading-6 text-zinc-600">Este ranking cruza uso do gatilho, volume enviado, leitura e força de resposta. O foco é entender quais argumentos ajudam umclientes inativos e críticos a voltar a considerar a maquininha.</p>
+          <div className="grid gap-4 md:grid-cols-3">{topGatilhos.map((item, index) => <div key={item.nome} className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">#{index + 1} gatilho</p><p className="mt-2 text-lg font-bold text-[#262626]">{item.nome}</p><div className="mt-3 grid grid-cols-2 gap-2 text-sm"><div className="rounded-xl bg-white p-2"><p className="text-zinc-500">Campanhas</p><p className="font-bold">{num(item.campanhas)}</p></div><div className="rounded-xl bg-white p-2"><p className="text-zinc-500">Enviados</p><p className="font-bold">{num(item.enviados)}</p></div><div className="rounded-xl bg-white p-2"><p className="text-zinc-500">Lidos</p><p className="font-bold">{num(item.lidos)}</p><p className="text-[11px] text-zinc-400">{pct(item.taxaLeitura)} leitura</p></div><div className="rounded-xl bg-white p-2"><p className="text-zinc-500">Resposta</p><p className="font-bold text-[#dd2145]">{pct(item.efetividadeResposta)}</p></div></div><div className="mt-3 space-y-2 text-xs leading-5 text-zinc-600"><p><span className="font-bold text-[#262626]">Templates referência:</span> {item.templatesReferencia}</p><p><span className="font-bold text-[#262626]">Leitura:</span> esse gatilho teve força de resposta baseada em leitura, recorrência e uso nos templates.</p></div></div>)}</div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2"><span className="text-[#dd2145]">✨</span><h3 className="font-bold">Top 2 templates por TPV gerado</h3></div>
+          <p className="mb-4 text-sm text-zinc-500">Analisa os 2 templates que mais geraram TPV após a comunicação, priorizando retorno real de uso da maquininha.</p>
+          <div className="overflow-hidden rounded-2xl border border-zinc-200"><div className="max-h-[520px] overflow-auto thin-scrollbar"><table className="w-full min-w-[1150px] border-collapse text-sm"><thead className="sticky top-0 z-10 bg-[#262626] text-white"><tr><th className="px-3 py-3 text-left">ID Template</th><th className="px-3 py-3 text-left">Régua</th><th className="px-3 py-3 text-left">Abordagem</th><th className="px-3 py-3 text-left">Promessa</th><th className="px-3 py-3 text-left">Neuromarketing</th><th className="px-3 py-3 text-right">Recebidos</th><th className="px-3 py-3 text-right">Lidos</th><th className="px-3 py-3 text-right">TPV</th><th className="px-3 py-3 text-right">Tx. leitura</th><th className="px-3 py-3 text-right">Score</th></tr></thead><tbody>{ranking.map((row) => <tr key={row.nome} className="border-b border-zinc-100 odd:bg-white even:bg-zinc-50"><td className="px-3 py-3 font-bold text-[#262626]">{row.nome}</td><td className="px-3 py-3">{row.reguaPrincipal}</td><td className="px-3 py-3">{row.abordagemPrincipal}</td><td className="px-3 py-3">{row.promessaPrincipal}</td><td className="px-3 py-3">{row.neuroPrincipal}</td><td className="px-3 py-3 text-right">{num(row.recebidos)}</td><td className="px-3 py-3 text-right">{num(row.lidos)}</td><td className="px-3 py-3 text-right font-bold text-[#dd2145]">{money(row.tpv)}</td><td className="px-3 py-3 text-right">{pct(row.taxaLeitura)}</td><td className="px-3 py-3 text-right font-bold">{pct(row.scoreRetomada)}</td></tr>)}</tbody></table></div></div>
+        </section>
+
+        <section className="mt-6 grid gap-4 lg:grid-cols-3">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2"><div className="mb-3 flex items-center gap-2"><span className="text-[#dd2145]">💡</span><h3 className="font-bold">Insights estratégicos automáticos</h3></div><div className="grid gap-3 md:grid-cols-2">{insights.map((item, index) => <div key={index} className="rounded-2xl bg-zinc-50 p-4 text-sm leading-6 text-zinc-700"><span className="font-bold text-[#dd2145]">{index + 1}. </span>{item}</div>)}</div></div>
+          <div className="rounded-2xl border border-[#dd2145]/20 bg-[#dd2145]/5 p-5 shadow-sm"><div className="mb-3 flex items-center gap-2"><span className="text-[#dd2145]">🎯</span><h3 className="font-bold">Melhor direção</h3></div><p className="text-sm font-bold leading-6 text-[#262626]">{bestDirection.headline}</p><p className="mt-2 text-sm leading-6 text-zinc-700">{bestDirection.body}</p><p className="mt-3 rounded-2xl bg-white p-3 text-sm font-semibold leading-6 text-[#dd2145]">{bestDirection.action}</p></div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center gap-2"><span className="text-[#dd2145]">📌</span><h3 className="font-bold">Leitura executiva da efetividade da régua</h3></div><p className="mb-4 text-sm leading-6 text-zinc-600">A leitura executiva consolida a saúde da Régua Crítico em quatro dimensões: força de leitura, entrega, risco operacional e clareza persuasiva.</p><div className="grid gap-4 md:grid-cols-4">{healthSummary.map((item) => <div key={item.titulo} className="rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{item.titulo}</p><p className="mt-2 text-2xl font-bold text-[#dd2145]">{item.valor}</p><p className="mt-2 text-sm leading-6 text-zinc-600">{item.texto}</p></div>)}</div></section>
+
+        <section className="mt-6 grid gap-4 xl:grid-cols-2">
+          <ChartCard title="TPV por template" subtitle="Mostra quais templates geraram maior valor transacionado após a comunicação." source={CHART_SOURCE_NOTES.tpvTemplate} analysis={chartAnalyses.tpvTemplate}><ResponsiveContainer width="100%" height="100%"><BarChart data={byTemplate.slice(0, 10)} margin={{ top: 10, right: 15, left: 0, bottom: 70 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="nome" angle={-25} textAnchor="end" height={95} tick={{ fontSize: 11 }} /><YAxis tickFormatter={(value) => money(value)} /><Tooltip content={<CustomTooltip />} /><Bar dataKey="tpv" name="TPV" fill={BRAND_RED} radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
+          <ChartCard title="TPV por régua" subtitle="Compara o retorno entre Inativo e Crítico." source={CHART_SOURCE_NOTES.regua} analysis={chartAnalyses.regua}><ResponsiveContainer width="100%" height="100%"><BarChart data={byRegua} margin={{ top: 10, right: 15, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="nome" /><YAxis tickFormatter={(value) => money(value)} /><Tooltip content={<CustomTooltip />} /><Legend /><Bar dataKey="tpv" name="TPV" fill={BRAND_RED} radius={[8, 8, 0, 0]} /><Bar dataKey="taxaLeitura" name="Taxa leitura" fill={BRAND_DARK} radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
+          <ChartCard title="Gatilho por score de reativação" subtitle="Mostra qual mecanismo persuasivo teve maior força de resposta." source={CHART_SOURCE_NOTES.gatilho} analysis={chartAnalyses.gatilho}><ResponsiveContainer width="100%" height="100%"><BarChart data={byNeuro.slice(0, 10)} margin={{ top: 10, right: 15, left: 0, bottom: 70 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="nome" angle={-25} textAnchor="end" height={95} tick={{ fontSize: 11 }} /><YAxis tickFormatter={(value) => `${Math.round(value * 100)}%`} /><Tooltip content={<CustomTooltip />} /><Bar dataKey="scoreRetomada" name="Score reativação" fill={BRAND_RED} radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
+          <ChartCard title="Promessa principal por TPV" subtitle="Mostra qual promessa mais se conectou à reativação de uso." source={CHART_SOURCE_NOTES.promessa} analysis={chartAnalyses.promessa}><ResponsiveContainer width="100%" height="100%"><BarChart data={byPromessa.slice(0, 10)} margin={{ top: 10, right: 15, left: 0, bottom: 70 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="nome" angle={-25} textAnchor="end" height={95} tick={{ fontSize: 11 }} /><YAxis tickFormatter={(value) => money(value)} /><Tooltip content={<CustomTooltip />} /><Bar dataKey="tpv" name="TPV" fill={BRAND_RED} radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
+          <ChartCard title="CTA x score de reativação" subtitle="Avalia se o próximo passo ajudou o cliente a voltar a transacionar." source={CHART_SOURCE_NOTES.cta} analysis={chartAnalyses.cta}><ResponsiveContainer width="100%" height="100%"><BarChart data={byCTA} margin={{ top: 10, right: 15, left: 0, bottom: 70 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="nome" angle={-25} textAnchor="end" height={95} tick={{ fontSize: 11 }} /><YAxis tickFormatter={(value) => `${Math.round(value * 100)}%`} /><Tooltip content={<CustomTooltip />} /><Bar dataKey="scoreRetomada" name="Score reativação" fill={BRAND_RED} radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
+          <ChartCard title="Com imagem vs sem imagem" subtitle="Compara formato visual com TPV e leitura." source={CHART_SOURCE_NOTES.push} analysis={chartAnalyses.imagem}><ResponsiveContainer width="100%" height="100%"><BarChart data={byImagem} margin={{ top: 10, right: 15, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="nome" /><YAxis tickFormatter={(value) => money(value)} /><Tooltip content={<CustomTooltip />} /><Legend /><Bar dataKey="tpv" name="TPV" fill={BRAND_RED} radius={[8, 8, 0, 0]} /><Bar dataKey="taxaLeitura" name="Taxa leitura" fill={BRAND_DARK} radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></ChartCard>
+          <ChartCard title="Leitura x TPV" subtitle="Ajuda a entender se mais leitura acompanhou maior reativação." source={CHART_SOURCE_NOTES.volume} analysis={chartAnalyses.leituraTPV}><ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 10, right: 15, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="x" name="Lidos" /><YAxis dataKey="y" name="TPV" tickFormatter={(value) => money(value)} /><ZAxis dataKey="z" range={[80, 420]} /><Tooltip content={<CustomTooltip />} /><Scatter name="Templates" data={scatterData} fill={BRAND_RED} /></ScatterChart></ResponsiveContainer></ChartCard>
+          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center gap-2"><span className="text-[#dd2145]">💡</span><h3 className="text-base font-bold text-[#262626]">Análise de leitura x TPV</h3></div><div className="rounded-2xl bg-[#dd2145]/5 p-4 ring-1 ring-[#dd2145]/10"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Leitura principal</p><p className="mt-2 text-lg font-bold text-[#262626]">{performanceAnalysis.titulo}</p><p className="mt-2 text-sm leading-6 text-zinc-700">{performanceAnalysis.resumo}</p></div><div className="mt-4 space-y-2">{performanceAnalysis.pontos.map((item, index) => <div key={index} className="rounded-xl bg-zinc-50 p-3 text-sm leading-6 text-zinc-700 ring-1 ring-zinc-100"><span className="font-bold text-[#dd2145]">{index + 1}. </span>{item}</div>)}</div><div className="mt-4 rounded-2xl bg-zinc-50 p-4 text-sm font-semibold leading-6 text-[#262626] ring-1 ring-zinc-100">{performanceAnalysis.direcao}</div></div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center gap-2"><span className="text-[#dd2145]">⚠️</span><h3 className="font-bold">Como o dashboard classifica a Régua Crítico</h3></div><div className="grid gap-3 md:grid-cols-2"><div className="rounded-2xl bg-zinc-50 p-4"><p className="font-bold">1. TPV como sinal de retorno</p><p className="mt-1 text-sm leading-6 text-zinc-600">O TPV indica que o cliente voltou a transacionar na maquininha após identificar a comunicação.</p></div><div className="rounded-2xl bg-zinc-50 p-4"><p className="font-bold">2. Leitura como sinal de crítico</p><p className="mt-1 text-sm leading-6 text-zinc-600">A taxa de leitura mostra se a mensagem conseguiu gerar interesse suficiente para ser aberta.</p></div><div className="rounded-2xl bg-zinc-50 p-4"><p className="font-bold">3. Score de reativação</p><p className="mt-1 text-sm leading-6 text-zinc-600">Combina leitura, entrega, clareza, força persuasiva, prévia push e aderência estratégica.</p></div><div className="rounded-2xl bg-zinc-50 p-4"><p className="font-bold">4. Validação humana</p><p className="mt-1 text-sm leading-6 text-zinc-600">A classificação é automática e deve ser revisada em mensagens ambíguas ou campanhas com amostra pequena.</p></div></div></section>
+
+        <section className="mt-6 rounded-2xl border border-zinc-200 bg-[#262626] p-5 text-white shadow-sm"><div className="mb-4 flex items-center gap-2"><span className="text-[#dd2145]">🧠</span><h3 className="font-bold">Assinatura metodológica das fontes utilizadas</h3></div><p className="mb-4 text-sm leading-6 text-zinc-300">As análises, rankings, scores e diretivas deste dashboard combinam TPV, engajamento, neurovendas, marketing estratégico, posicionamento, tomada de decisão e comportamento B2B.</p><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{SOURCE_SIGNATURE.map((item) => <div key={item.nome} className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="text-sm font-bold text-white">{item.nome}</p><p className="mt-2 text-sm leading-6 text-zinc-300">{item.uso}</p></div>)}<div className="rounded-2xl border border-[#dd2145]/40 bg-[#dd2145]/15 p-4 ring-1 ring-[#dd2145]/20"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#dd2145]">Aplicação prática</p><p className="mt-2 text-sm font-bold text-white">Aplicação na PERmite</p><p className="mt-2 text-sm leading-6 text-zinc-200">A Régua Crítico é avaliada pela capacidade de transformar retorno ao uso em reativação de transação, medida pelo TPV após a comunicação.</p></div></div></section>
+      </div>
+    </div>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<DashboardReguaCriticoPERmite />);
+  </script>
+</body>
+</html>
